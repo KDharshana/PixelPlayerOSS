@@ -328,11 +328,15 @@ fun LibraryActionRow(
                          com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL -> Icons.Rounded.Dataset
                          com.lostf1sh.pixelplayeross.data.model.StorageFilter.ONLINE -> Icons.Rounded.Cloud
                          com.lostf1sh.pixelplayeross.data.model.StorageFilter.OFFLINE -> Icons.Rounded.PhoneAndroid
+                         com.lostf1sh.pixelplayeross.data.model.StorageFilter.LOCAL_ONLY -> Icons.Rounded.PhoneAndroid
+                         com.lostf1sh.pixelplayeross.data.model.StorageFilter.YOUTUBE_MUSIC -> Icons.Rounded.Cloud
                      }
                      val tooltipText = when(currentStorageFilter) {
                          com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL -> stringResource(R.string.library_storage_filter_all_songs)
                          com.lostf1sh.pixelplayeross.data.model.StorageFilter.ONLINE -> stringResource(R.string.library_storage_filter_online)
                          com.lostf1sh.pixelplayeross.data.model.StorageFilter.OFFLINE -> stringResource(R.string.library_storage_filter_offline)
+                         com.lostf1sh.pixelplayeross.data.model.StorageFilter.LOCAL_ONLY -> "Local Only"
+                         com.lostf1sh.pixelplayeross.data.model.StorageFilter.YOUTUBE_MUSIC -> "YouTube Music"
                      }
                      val tooltipState = rememberTooltipState()
 

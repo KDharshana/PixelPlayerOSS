@@ -608,12 +608,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND source_type = 7
             )
         )
         ORDER BY parent_directory_path ASC, title ASC
@@ -630,12 +634,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND source_type = 7
             )
         )
         ORDER BY
@@ -667,12 +675,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         ORDER BY
@@ -704,12 +716,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND source_type = 7
             )
         )
         ORDER BY
@@ -743,12 +759,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND source_type = 7
             )
         )
         ORDER BY
@@ -787,12 +807,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         ORDER BY
@@ -824,12 +848,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         ORDER BY songs.title COLLATE NOCASE ASC
@@ -848,12 +876,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         ORDER BY
@@ -1049,12 +1081,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         GROUP BY
@@ -1093,12 +1129,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         GROUP BY
@@ -1353,12 +1393,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         GROUP BY artists.id
@@ -1393,12 +1437,16 @@ interface MusicDao {
         AND (
             :filterMode = 0
             OR (
-                :filterMode = 1
+                (:filterMode = 1 OR :filterMode = 3)
                 AND songs.source_type = 0
             )
             OR (
                 :filterMode = 2
                 AND songs.source_type != 0
+            )
+            OR (
+                :filterMode = 4
+                AND songs.source_type = 7
             )
         )
         GROUP BY artists.id

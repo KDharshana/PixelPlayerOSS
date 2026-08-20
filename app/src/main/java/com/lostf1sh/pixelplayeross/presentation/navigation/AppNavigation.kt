@@ -237,6 +237,9 @@ fun AppNavigation(
                         },
                         onOpenJellyfinDashboard = {
                             navController.navigateSafely(Screen.JellyfinDashboard.route)
+                        },
+                        onOpenYouTubeDashboard = {
+                            navController.navigateSafely(Screen.YouTubeDashboard.route)
                         }
                     )
                 }
@@ -590,6 +593,22 @@ fun AppNavigation(
                 ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
                     com.lostf1sh.pixelplayeross.presentation.jellyfin.dashboard.JellyfinDashboardScreen(
                         onBack = { navController.popBackStack() }
+                    )
+                }
+            }
+            composable(
+                Screen.YouTubeDashboard.route,
+                enterTransition = { enterTransition() },
+                exitTransition = { exitTransition() },
+                popEnterTransition = { popEnterTransition() },
+                popExitTransition = { popExitTransition() },
+            ) {
+                ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
+                    com.lostf1sh.pixelplayeross.presentation.youtube.dashboard.YouTubeDashboardScreen(
+                        onBackClick = { navController.popBackStack() },
+                        onSongClick = { song ->
+                            playerViewModel.playSong(song)
+                        }
                     )
                 }
             }

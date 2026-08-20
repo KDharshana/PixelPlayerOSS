@@ -28,6 +28,8 @@ import com.lostf1sh.pixelplayeross.data.database.MIGRATION_1_2
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_2_3
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_3_4
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_4_5
+import com.lostf1sh.pixelplayeross.data.database.MIGRATION_5_6
+import com.lostf1sh.pixelplayeross.data.database.YouTubeDao
 import com.lostf1sh.pixelplayeross.data.database.MusicDao
 import com.lostf1sh.pixelplayeross.data.database.OfflineTrackDao
 import com.lostf1sh.pixelplayeross.data.database.PixelPlayerDatabase
@@ -132,7 +134,7 @@ object AppModule {
             "pixelplayer_database"
         )
             .addCallback(PixelPlayerDatabase.createRuntimeArtifactsCallback())
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
 
         if (BuildConfig.DEBUG) {
@@ -200,6 +202,12 @@ object AppModule {
     @Provides
     fun provideJellyfinDao(database: PixelPlayerDatabase): com.lostf1sh.pixelplayeross.data.database.JellyfinDao {
         return database.jellyfinDao()
+    }
+
+    @Singleton
+    @Provides
+    fun provideYouTubeDao(database: PixelPlayerDatabase): YouTubeDao {
+        return database.youTubeDao()
     }
 
     @Singleton
@@ -378,10 +386,11 @@ object AppModule {
             .retryOnConnectionFailure(true)
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
-                val requestWithUserAgent = originalRequest.newBuilder()
-                    .header("User-Agent", "PixelPlayerOSS/1.0 (Android; Music Player)")
-                    .build()
-                chain.proceed(requestWithUserAgent)
+                val builder = originalRequest.newBuilder()
+                if (originalRequest.header("User-Agent") == null) {
+                    builder.header("User-Agent", "PixelPlayerOSS/1.0 (Android; Music Player)")
+                }
+                chain.proceed(builder.build())
             }
             .addInterceptor(loggingInterceptor)
             .build()
@@ -438,11 +447,14 @@ object AppModule {
             .retryOnConnectionFailure(true)
             .addInterceptor { chain ->
                 val originalRequest = chain.request()
-                val requestWithHeaders = originalRequest.newBuilder()
-                    .header("User-Agent", "PixelPlayerOSS/1.0 (Android; Music Player)")
-                    .header("Accept", "application/json")
-                    .build()
-                chain.proceed(requestWithHeaders)
+                val builder = originalRequest.newBuilder()
+                if (originalRequest.header("User-Agent") == null) {
+                    builder.header("User-Agent", "PixelPlayerOSS/1.0 (Android; Music Player)")
+                }
+                if (originalRequest.header("Accept") == null) {
+                    builder.header("Accept", "application/json")
+                }
+                chain.proceed(builder.build())
             }
             .addInterceptor(loggingInterceptor)
             .build()

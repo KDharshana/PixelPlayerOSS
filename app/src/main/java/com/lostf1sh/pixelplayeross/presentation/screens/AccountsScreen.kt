@@ -116,6 +116,7 @@ fun AccountsScreen(
     onBackClick: () -> Unit,
     onOpenNavidromeDashboard: () -> Unit = {},
     onOpenJellyfinDashboard: () -> Unit = {},
+    onOpenYouTubeDashboard: () -> Unit = {},
     viewModel: AccountsViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -203,6 +204,7 @@ fun AccountsScreen(
                 service = service,
                 onOpenNavidromeDashboard = onOpenNavidromeDashboard,
                 onOpenJellyfinDashboard = onOpenJellyfinDashboard,
+                onOpenYouTubeDashboard = onOpenYouTubeDashboard,
                 preferDashboard = false
             )
         }
@@ -245,6 +247,7 @@ fun AccountsScreen(
                                 service = account.service,
                                 onOpenNavidromeDashboard = onOpenNavidromeDashboard,
                                 onOpenJellyfinDashboard = onOpenJellyfinDashboard,
+                                onOpenYouTubeDashboard = onOpenYouTubeDashboard,
                                 preferDashboard = true
                             )
                         },
@@ -595,6 +598,14 @@ private fun servicePalette(service: ExternalServiceAccount): ServicePalette {
             primaryActionContainer = Color(0xFFFFE3D3),
             primaryActionTint = Color(0xFFA84A17)
         )
+        ExternalServiceAccount.YOUTUBE_MUSIC -> ServicePalette(
+            iconContainer = Color(0xFFFF0000),
+            iconTint = Color.White,
+            statusContainer = Color(0xFFFFEBEE),
+            statusTint = Color(0xFFC62828),
+            primaryActionContainer = Color(0xFFFFEBEE),
+            primaryActionTint = Color(0xFFC62828)
+        )
     }
 }
 
@@ -602,6 +613,7 @@ private fun accountIcon(service: ExternalServiceAccount): ImageVector {
     return when (service) {
         ExternalServiceAccount.NAVIDROME -> Icons.Rounded.CloudQueue
         ExternalServiceAccount.JELLYFIN -> Icons.Rounded.CloudQueue
+        ExternalServiceAccount.YOUTUBE_MUSIC -> Icons.Rounded.CloudQueue
         ExternalServiceAccount.LISTENBRAINZ -> Icons.Rounded.GraphicEq
     }
 }
@@ -652,6 +664,7 @@ private fun serviceDisplayName(service: ExternalServiceAccount): String {
     return when (service) {
         ExternalServiceAccount.NAVIDROME -> stringResource(R.string.cd_subsonic_logo)
         ExternalServiceAccount.JELLYFIN -> stringResource(R.string.auth_jellyfin_title)
+        ExternalServiceAccount.YOUTUBE_MUSIC -> "YouTube Music"
         ExternalServiceAccount.LISTENBRAINZ -> stringResource(R.string.accounts_listenbrainz_title)
     }
 }
@@ -661,6 +674,7 @@ private fun openService(
     service: ExternalServiceAccount,
     onOpenNavidromeDashboard: () -> Unit,
     onOpenJellyfinDashboard: () -> Unit,
+    onOpenYouTubeDashboard: () -> Unit,
     preferDashboard: Boolean
 ) {
     when (service) {
@@ -681,6 +695,16 @@ private fun openService(
                 safeStartActivity(
                     context = context,
                     intent = Intent(context, JellyfinLoginActivity::class.java)
+                )
+            }
+        }
+        ExternalServiceAccount.YOUTUBE_MUSIC -> {
+            if (preferDashboard) {
+                onOpenYouTubeDashboard()
+            } else {
+                safeStartActivity(
+                    context = context,
+                    intent = Intent(context, com.lostf1sh.pixelplayeross.presentation.youtube.auth.YouTubeLoginActivity::class.java)
                 )
             }
         }
@@ -753,6 +777,11 @@ private fun ConnectServiceButton(
             )
             ExternalServiceAccount.LISTENBRAINZ -> Icon(
                 imageVector = Icons.Rounded.GraphicEq,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            ExternalServiceAccount.YOUTUBE_MUSIC -> Icon(
+                imageVector = Icons.Rounded.CloudQueue,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )

@@ -153,3 +153,53 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         )
     }
 }
+
+/** v5 -> v6: YouTube Music cached songs and synced playlists. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+                CREATE TABLE IF NOT EXISTS `youtube_songs` (
+                    `id` TEXT NOT NULL,
+                    `video_id` TEXT NOT NULL,
+                    `playlist_id` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `artist` TEXT NOT NULL,
+                    `album` TEXT,
+                    `duration` INTEGER NOT NULL,
+                    `thumbnail_url` TEXT,
+                    `year` INTEGER NOT NULL,
+                    `date_added` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_youtube_songs_video_id` " +
+                "ON `youtube_songs` (`video_id`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_youtube_songs_playlist_id` " +
+                "ON `youtube_songs` (`playlist_id`)"
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_youtube_songs_playlist_id_date_added` " +
+                "ON `youtube_songs` (`playlist_id`, `date_added`)"
+        )
+        db.execSQL(
+            """
+                CREATE TABLE IF NOT EXISTS `youtube_playlists` (
+                    `id` TEXT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `author` TEXT,
+                    `song_count` INTEGER NOT NULL,
+                    `thumbnail_url` TEXT,
+                    `date_added` INTEGER NOT NULL,
+                    `date_modified` INTEGER NOT NULL,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent()
+        )
+    }
+}
+

@@ -34,6 +34,7 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
     private val dao: OfflineTrackDao,
     private val navidromeRepository: NavidromeRepository,
     private val jellyfinRepository: JellyfinRepository,
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
     baseOkHttpClient: OkHttpClient
 ) : CoroutineWorker(appContext, workerParams) {
     private val client = baseOkHttpClient.newBuilder()
@@ -205,7 +206,7 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
         setProgress(workDataOf(KEY_BYTES to copied, KEY_TOTAL_BYTES to (total ?: -1L)))
     }
 
-    private fun resolveSource(sourceUri: String): DownloadSource {
+    private suspend fun resolveSource(sourceUri: String): DownloadSource {
         val parsed = sourceUri.toUri()
         val id = parsed.host ?: parsed.path?.removePrefix("/")
             ?: throw IOException("Cloud track identifier is missing")
@@ -231,6 +232,17 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
                     allowedHost = jellyfinRepository.serverUrl
                 )
             }
+            "youtube" -> {
+                if (!CloudStreamSecurity.validateYouTubeVideoId(id)) {
+                    throw IOException("Invalid YouTube video identifier")
+                }
+                val streamUrl = youTubeRepository.getStreamUrl(id)
+                    ?: throw IOException("Failed to resolve YouTube stream URL")
+                DownloadSource(
+                    url = streamUrl,
+                    allowedHost = "https://googlevideo.com"
+                )
+            }
             else -> throw IOException("Unsupported cloud provider")
         }.also { source ->
             val host = source.allowedHost
@@ -239,7 +251,7 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
                 ?: throw IOException("Cloud account is not connected")
             if (!CloudStreamSecurity.isSafeRemoteStreamUrl(
                     url = source.url,
-                    allowedHostSuffixes = setOf(host),
+                    allowedHostSuffixes = setOf(host, "googlevideo.com", "youtube.com"),
                     allowHttpForAllowedHosts = true
                 )
             ) {

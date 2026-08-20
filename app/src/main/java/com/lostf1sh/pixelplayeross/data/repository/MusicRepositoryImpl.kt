@@ -387,6 +387,8 @@ class MusicRepositoryImpl @Inject constructor(
         StorageFilter.ALL -> 0
         StorageFilter.OFFLINE -> 1
         StorageFilter.ONLINE -> 2
+        StorageFilter.LOCAL_ONLY -> 3
+        StorageFilter.YOUTUBE_MUSIC -> 4
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -558,7 +560,12 @@ class MusicRepositoryImpl @Inject constructor(
         if (query.isBlank()) return emptyList()
         return playlistPreferencesRepository.userPlaylistsFlow.first()
             .filter { playlist ->
-                playlist.name.contains(query, ignoreCase = true)
+                playlist.name.contains(query, ignoreCase = true) ||
+                    com.lostf1sh.pixelplayeross.utils.FuzzySearchMatcher.isMatch(playlist.name, query)
+            }
+            .sortedByDescending { playlist ->
+                if (playlist.name.contains(query, ignoreCase = true)) 1.0f
+                else com.lostf1sh.pixelplayeross.utils.FuzzySearchMatcher.scoreMatch(playlist.name, query)
             }
     }
 

@@ -274,6 +274,7 @@ dependencies {
     implementation(libs.pinyin4j.core)
     implementation(libs.accompanist.drawablepainter)
     implementation(libs.accompanist.permissions)
+    implementation(libs.newpipe.extractor)
     implementation(libs.capturable) {
         exclude(group = "androidx.compose.animation")
         exclude(group = "androidx.compose.foundation")

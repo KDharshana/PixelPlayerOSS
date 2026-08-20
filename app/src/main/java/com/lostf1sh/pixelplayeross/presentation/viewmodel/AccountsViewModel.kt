@@ -34,6 +34,7 @@ private const val PROFILE_STATS_POLL_MS = 20_000L
 enum class ExternalServiceAccount {
     NAVIDROME,
     JELLYFIN,
+    YOUTUBE_MUSIC,
     LISTENBRAINZ
 }
 
@@ -83,6 +84,8 @@ data class AccountsUiState(
 class AccountsViewModel @Inject constructor(
     private val navidromeRepository: NavidromeRepository,
     private val jellyfinRepository: JellyfinRepository,
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
+    private val userPreferencesRepository: com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository,
     private val listenBrainzRepository: ListenBrainzRepository,
     private val listenBrainzPreferences: ListenBrainzPreferencesRepository
 ) : ViewModel() {
@@ -99,6 +102,13 @@ class AccountsViewModel @Inject constructor(
     private val jellyfinStateFlow = combine(
         jellyfinRepository.isLoggedInFlow,
         jellyfinRepository.getPlaylists().map { it.size }
+    ) { connected, playlistCount ->
+        connected to playlistCount
+    }
+
+    private val youTubeStateFlow = combine(
+        userPreferencesRepository.youTubeAuthCookiesFlow.map { !it.isNullOrBlank() },
+        youTubeRepository.playlistsFlow.map { it.size }
     ) { connected, playlistCount ->
         connected to playlistCount
     }
@@ -169,7 +179,8 @@ class AccountsViewModel @Inject constructor(
         combine(
             listOf(
                 navidromeStateFlow,
-                jellyfinStateFlow
+                jellyfinStateFlow,
+                youTubeStateFlow
             )
         ) { it.toList() },
         listenBrainzStateFlow,
@@ -177,6 +188,7 @@ class AccountsViewModel @Inject constructor(
     ) { states, listenBrainz, activeLogouts ->
         val (navidromeConnected, navidromePlaylistCount) = states[0]
         val (jellyfinConnected, jellyfinPlaylistCount) = states[1]
+        val (youTubeConnected, youTubePlaylistCount) = states[2]
 
         val connectedAccounts = buildList {
             if (navidromeConnected) {
@@ -213,6 +225,21 @@ class AccountsViewModel @Inject constructor(
                     )
                 )
             }
+            if (youTubeConnected) {
+                add(
+                    ExternalAccountUiModel(
+                        service = ExternalServiceAccount.YOUTUBE_MUSIC,
+                        title = "YouTube Music",
+                        accountLabel = "Google Account Connected",
+                        syncedContentLabel = formatCount(
+                            count = youTubePlaylistCount,
+                            singular = "synced playlist",
+                            plural = "synced playlists"
+                        ),
+                        isLoggingOut = ExternalServiceAccount.YOUTUBE_MUSIC in activeLogouts
+                    )
+                )
+            }
             if (listenBrainz != null) {
                 add(
                     ExternalAccountUiModel(
@@ -239,6 +266,7 @@ class AccountsViewModel @Inject constructor(
         val disconnectedServices = buildList {
             if (!navidromeConnected) add(ExternalServiceAccount.NAVIDROME)
             if (!jellyfinConnected) add(ExternalServiceAccount.JELLYFIN)
+            if (!youTubeConnected) add(ExternalServiceAccount.YOUTUBE_MUSIC)
             if (listenBrainz == null) add(ExternalServiceAccount.LISTENBRAINZ)
         }
 
@@ -259,6 +287,7 @@ class AccountsViewModel @Inject constructor(
                     when (service) {
                         ExternalServiceAccount.NAVIDROME -> navidromeRepository.logout()
                         ExternalServiceAccount.JELLYFIN -> jellyfinRepository.logout()
+                        ExternalServiceAccount.YOUTUBE_MUSIC -> userPreferencesRepository.setYouTubeAuthCookies(null)
                         ExternalServiceAccount.LISTENBRAINZ -> listenBrainzRepository.disconnect()
                     }
                 }

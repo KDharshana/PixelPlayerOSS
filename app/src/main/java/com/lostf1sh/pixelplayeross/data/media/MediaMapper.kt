@@ -58,7 +58,8 @@ class MediaMapper @Inject constructor(
             dateAdded = dateAdded,
             mimeType = null, 
             bitrate = null,
-            sampleRate = null
+            sampleRate = null,
+            youtubeId = if (id.startsWith("youtube_")) id.removePrefix("youtube_") else if (contentUri.startsWith("youtube://")) contentUri.removePrefix("youtube://") else null
         )
     }
 }

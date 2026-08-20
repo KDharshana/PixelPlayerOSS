@@ -1637,23 +1637,21 @@ class PlayerViewModel @Inject constructor(
 
             searchStateHolder.initialize(viewModelScope)
 
-            viewModelScope.launch {
-                combine(
-                    searchStateHolder.searchResults,
-                    searchStateHolder.selectedSearchFilter,
-                    searchStateHolder.searchHistory,
-                ) { results, filter, history ->
-                    Triple(results, filter, history)
-                }.collect { (results, filter, history) ->
-                    _playerUiState.update {
-                        it.copy(
-                            searchResults = results,
-                            selectedSearchFilter = filter,
-                            searchHistory = history,
-                        )
-                    }
+            combine(
+                searchStateHolder.searchResults,
+                searchStateHolder.selectedSearchFilter,
+                searchStateHolder.searchHistory,
+                searchStateHolder.isLoadingMore,
+            ) { results, filter, history, loadingMore ->
+                _playerUiState.update {
+                    it.copy(
+                        searchResults = results,
+                        selectedSearchFilter = filter,
+                        searchHistory = history,
+                        isLoadingMoreSearchResults = loadingMore,
+                    )
                 }
-            }
+            }.launchIn(viewModelScope)
 
             libraryStateHolder.initialize(viewModelScope)
 
@@ -1804,7 +1802,9 @@ class PlayerViewModel @Inject constructor(
     fun toggleStorageFilter() {
         val current = _playerUiState.value.currentStorageFilter
         val next = when (current) {
-            com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL -> com.lostf1sh.pixelplayeross.data.model.StorageFilter.ONLINE
+            com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL -> com.lostf1sh.pixelplayeross.data.model.StorageFilter.LOCAL_ONLY
+            com.lostf1sh.pixelplayeross.data.model.StorageFilter.LOCAL_ONLY -> com.lostf1sh.pixelplayeross.data.model.StorageFilter.YOUTUBE_MUSIC
+            com.lostf1sh.pixelplayeross.data.model.StorageFilter.YOUTUBE_MUSIC -> com.lostf1sh.pixelplayeross.data.model.StorageFilter.ONLINE
             com.lostf1sh.pixelplayeross.data.model.StorageFilter.ONLINE -> com.lostf1sh.pixelplayeross.data.model.StorageFilter.OFFLINE
             com.lostf1sh.pixelplayeross.data.model.StorageFilter.OFFLINE -> com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL
         }
@@ -3907,6 +3907,10 @@ class PlayerViewModel @Inject constructor(
 
     fun performSearch(query: String) {
         searchStateHolder.performSearch(query)
+    }
+
+    fun loadMoreSearchResults() {
+        searchStateHolder.loadMoreSearchResults()
     }
 
     fun deleteSearchHistoryItem(query: String) {

@@ -130,7 +130,8 @@ import androidx.compose.ui.res.stringResource
 
 private data class SearchUiSlice(
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
-    val searchResults: ImmutableList<SearchResultItem> = persistentListOf()
+    val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val isLoadingMoreSearchResults: Boolean = false
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -155,7 +156,8 @@ fun SearchScreen(
             .map { uiState ->
                 SearchUiSlice(
                     selectedSearchFilter = uiState.selectedSearchFilter,
-                    searchResults = uiState.searchResults
+                    searchResults = uiState.searchResults,
+                    isLoadingMoreSearchResults = uiState.isLoadingMoreSearchResults
                 )
             }
             .distinctUntilChanged()
@@ -403,6 +405,7 @@ fun SearchScreen(
                                     results = searchResults,
                                     searchQuery = searchQuery,
                                     playerViewModel = playerViewModel,
+                                    isLoadingMore = searchUiState.isLoadingMoreSearchResults,
                                     onItemSelected = {
                                         if (searchQuery.isNotBlank()) {
                                             playerViewModel.onSearchQuerySubmitted(searchQuery)
@@ -669,6 +672,7 @@ fun SearchResultsList(
     results: ImmutableList<SearchResultItem>,
     searchQuery: String,
     playerViewModel: PlayerViewModel,
+    isLoadingMore: Boolean = false,
     onItemSelected: () -> Unit,
     currentPlayingSongId: String?,
     isPlaying: Boolean,
@@ -736,8 +740,24 @@ fun SearchResultsList(
 
     val imePadding = WindowInsets.ime.getBottom(localDensity).dp
     val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 94.dp
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val totalItems = listState.layoutInfo.totalItemsCount
+            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisibleItem >= totalItems - 4
+        }
+    }
+
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            playerViewModel.loadMoreSearchResults()
+        }
+    }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .clip(
@@ -896,6 +916,23 @@ fun SearchResultsList(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        if (isLoadingMore) {
+            item(key = "search_loading_more_indicator") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }

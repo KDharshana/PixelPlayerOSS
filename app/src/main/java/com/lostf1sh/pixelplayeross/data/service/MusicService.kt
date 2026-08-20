@@ -64,6 +64,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -175,6 +176,8 @@ class MusicService : MediaSessionService() {
     lateinit var navidromeRepository: NavidromeRepository
     @Inject
     lateinit var listeningStatsTracker: ListeningStatsTracker
+    @Inject
+    lateinit var youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
     @Inject
     @AppScope
     lateinit var appScope: CoroutineScope
@@ -1163,6 +1166,7 @@ class MusicService : MediaSessionService() {
             if (nextIndex != androidx.media3.common.C.INDEX_UNSET) {
                 runCatching { replayGainProcessor.prefetch(player.getMediaItemAt(nextIndex)) }
             }
+            checkAndTriggerInfiniteAutoplay(mediaItem)
             requestWidgetFullUpdate(force = false)
             mediaSession?.let { refreshMediaSessionUi(it) }
             schedulePlaybackSnapshotPersist()
@@ -1215,6 +1219,66 @@ class MusicService : MediaSessionService() {
     private fun applyPlaybackSpeed(player: Player) {
         if (abs(player.playbackParameters.speed - userPlaybackSpeed) > 0.001f) {
             player.setPlaybackSpeed(userPlaybackSpeed)
+        }
+    }
+
+    private var isAutoplayFetching = false
+    private var lastAutoplaySeedId: String? = null
+
+    private fun checkAndTriggerInfiniteAutoplay(currentMediaItem: MediaItem?) {
+        if (currentMediaItem == null) return
+        val player = mediaSession?.player ?: engine.masterPlayer
+        val currentIndex = player.currentMediaItemIndex
+        val totalCount = player.mediaItemCount
+
+        if (currentIndex != androidx.media3.common.C.INDEX_UNSET && currentIndex >= totalCount - 2) {
+            val mediaId = currentMediaItem.mediaId
+            if (mediaId == lastAutoplaySeedId || isAutoplayFetching) return
+
+            serviceScope.launch {
+                val autoplayEnabled = userPreferencesRepository.infiniteAutoplayEnabledFlow.first()
+                if (!autoplayEnabled) return@launch
+
+                isAutoplayFetching = true
+                lastAutoplaySeedId = mediaId
+
+                try {
+                    val currentSong = musicRepository.getSong(mediaId).firstOrNull() ?: com.lostf1sh.pixelplayeross.data.model.Song(
+                        id = mediaId,
+                        title = currentMediaItem.mediaMetadata.title?.toString() ?: "",
+                        artist = currentMediaItem.mediaMetadata.artist?.toString() ?: "",
+                        artistId = 0L,
+                        album = currentMediaItem.mediaMetadata.albumTitle?.toString() ?: "",
+                        albumId = 0L,
+                        path = "",
+                        duration = 0L,
+                        albumArtUriString = currentMediaItem.mediaMetadata.artworkUri?.toString() ?: "",
+                        contentUriString = currentMediaItem.localConfiguration?.uri?.toString() ?: "",
+                        mimeType = "audio/mp4",
+                        bitrate = null,
+                        sampleRate = null,
+                        youtubeId = if (mediaId.startsWith("youtube_")) mediaId.removePrefix("youtube_") else null
+                    )
+
+                    val radioSongs = youTubeRepository.getRadioTracksForSong(currentSong)
+                    if (radioSongs.isNotEmpty()) {
+                        val existingIds = (0 until player.mediaItemCount).map {
+                            player.getMediaItemAt(it).mediaId
+                        }.toSet()
+
+                        val newTracks = radioSongs.filter { it.id !in existingIds && it.contentUriString !in existingIds }
+                        if (newTracks.isNotEmpty()) {
+                            val newMediaItems = newTracks.map { MediaItemBuilder.build(it) }
+                            player.addMediaItems(newMediaItems)
+                            Timber.tag("MusicService").d("Infinite autoplay appended ${newMediaItems.size} radio tracks to queue")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("MusicService").w(e, "Failed to fetch infinite autoplay tracks")
+                } finally {
+                    isAutoplayFetching = false
+                }
+            }
         }
     }
 

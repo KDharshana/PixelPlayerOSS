@@ -55,6 +55,16 @@ private fun libraryEmptySpec(
                 titleRes = R.string.lib_empty_songs_online_title,
                 subtitleRes = R.string.lib_empty_songs_online_subtitle
             )
+            StorageFilter.LOCAL_ONLY -> LibraryEmptySpec(
+                iconRes = R.drawable.rounded_music_off_24,
+                titleRes = R.string.lib_empty_songs_offline_title,
+                subtitleRes = R.string.lib_empty_songs_offline_subtitle
+            )
+            StorageFilter.YOUTUBE_MUSIC -> LibraryEmptySpec(
+                iconRes = R.drawable.rounded_music_off_24,
+                titleRes = R.string.lib_empty_songs_online_title,
+                subtitleRes = R.string.lib_empty_songs_online_subtitle
+            )
         }
 
         LibraryTabId.ALBUMS -> when (storageFilter) {
@@ -69,6 +79,16 @@ private fun libraryEmptySpec(
                 subtitleRes = R.string.lib_empty_albums_offline_subtitle
             )
             StorageFilter.ONLINE -> LibraryEmptySpec(
+                iconRes = R.drawable.rounded_album_24,
+                titleRes = R.string.lib_empty_albums_online_title,
+                subtitleRes = R.string.lib_empty_albums_online_subtitle
+            )
+            StorageFilter.LOCAL_ONLY -> LibraryEmptySpec(
+                iconRes = R.drawable.rounded_album_24,
+                titleRes = R.string.lib_empty_albums_offline_title,
+                subtitleRes = R.string.lib_empty_albums_offline_subtitle
+            )
+            StorageFilter.YOUTUBE_MUSIC -> LibraryEmptySpec(
                 iconRes = R.drawable.rounded_album_24,
                 titleRes = R.string.lib_empty_albums_online_title,
                 subtitleRes = R.string.lib_empty_albums_online_subtitle
@@ -91,6 +111,16 @@ private fun libraryEmptySpec(
                 titleRes = R.string.lib_empty_artists_online_title,
                 subtitleRes = R.string.lib_empty_artists_online_subtitle
             )
+            StorageFilter.LOCAL_ONLY -> LibraryEmptySpec(
+                iconRes = R.drawable.rounded_artist_24,
+                titleRes = R.string.lib_empty_artists_offline_title,
+                subtitleRes = R.string.lib_empty_artists_offline_subtitle
+            )
+            StorageFilter.YOUTUBE_MUSIC -> LibraryEmptySpec(
+                iconRes = R.drawable.rounded_artist_24,
+                titleRes = R.string.lib_empty_artists_online_title,
+                subtitleRes = R.string.lib_empty_artists_online_subtitle
+            )
         }
 
         LibraryTabId.LIKED -> when (storageFilter) {
@@ -105,6 +135,16 @@ private fun libraryEmptySpec(
                 subtitleRes = R.string.lib_empty_liked_offline_subtitle
             )
             StorageFilter.ONLINE -> LibraryEmptySpec(
+                iconRes = R.drawable.round_favorite_24,
+                titleRes = R.string.lib_empty_liked_online_title,
+                subtitleRes = R.string.lib_empty_liked_online_subtitle
+            )
+            StorageFilter.LOCAL_ONLY -> LibraryEmptySpec(
+                iconRes = R.drawable.round_favorite_24,
+                titleRes = R.string.lib_empty_liked_offline_title,
+                subtitleRes = R.string.lib_empty_liked_offline_subtitle
+            )
+            StorageFilter.YOUTUBE_MUSIC -> LibraryEmptySpec(
                 iconRes = R.drawable.round_favorite_24,
                 titleRes = R.string.lib_empty_liked_online_title,
                 subtitleRes = R.string.lib_empty_liked_online_subtitle

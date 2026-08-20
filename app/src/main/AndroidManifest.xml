@@ -80,6 +80,13 @@
             android:theme="@style/Theme.PixelPlayer"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".presentation.youtube.auth.YouTubeLoginActivity"
+            android:exported="false"
+            android:label="YouTube Music Login"
+            android:theme="@style/Theme.PixelPlayer"
+            android:windowSoftInputMode="adjustResize" />
+
 
         <activity
             android:name=".ExternalPlayerActivity"

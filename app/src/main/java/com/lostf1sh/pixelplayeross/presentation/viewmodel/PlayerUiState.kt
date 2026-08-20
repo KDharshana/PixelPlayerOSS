@@ -18,6 +18,7 @@ data class PlayerUiState(
     val currentPlaybackQueue: ImmutableList<Song> = persistentListOf(),
     val currentQueueSourceName: String = "All Songs",
     val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val isLoadingMoreSearchResults: Boolean = false,
     val musicFolders: ImmutableList<MusicFolder> = persistentListOf(),
     val sortOption: SortOption = SortOption.SongDefaultOrder,
     val isLoadingInitialSongs: Boolean = true,

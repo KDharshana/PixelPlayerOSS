@@ -50,6 +50,11 @@ class BackupManagerTest {
 
     private val backupUri: Uri = mockk(relaxed = true)
 
+    @org.junit.jupiter.api.BeforeEach
+    fun setUp() {
+        coEvery { backupReader.detectFormat(any()) } returns Result.success(com.lostf1sh.pixelplayeross.data.backup.format.BackupFormatDetector.Format.PXPL_V3_ZIP)
+    }
+
     @Test
     fun `inspectBackup surfaces file and module warnings in the restore plan`() = runTest {
         val plan = restorePlan(selectedModules = setOf(BackupSection.ENGAGEMENT_STATS))

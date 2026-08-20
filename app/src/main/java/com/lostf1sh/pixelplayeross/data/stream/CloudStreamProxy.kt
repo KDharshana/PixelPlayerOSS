@@ -16,9 +16,11 @@ import io.ktor.server.routing.routing
 import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -195,12 +197,23 @@ abstract class CloudStreamProxy<K : Any>(
         )
     }
 
+    private val inFlightResolutions = ConcurrentHashMap<K, Deferred<String?>>()
+
     protected suspend fun getOrFetchStreamUrl(id: K): String? {
         urlCache[id]?.let { cached ->
             if (!cached.isExpired()) return cached.url
         }
-        return resolveStreamUrl(id)?.also { url ->
-            urlCache[id] = CachedUrl(url, System.currentTimeMillis(), cacheExpirationMs)
+        val deferred = inFlightResolutions.computeIfAbsent(id) {
+            proxyScope.async {
+                resolveStreamUrl(id)?.also { url ->
+                    urlCache[id] = CachedUrl(url, System.currentTimeMillis(), cacheExpirationMs)
+                }
+            }
+        }
+        return try {
+            deferred.await()
+        } finally {
+            inFlightResolutions.remove(id, deferred)
         }
     }
 
@@ -315,6 +328,7 @@ abstract class CloudStreamProxy<K : Any>(
                                                 .also { bytesRead = it } != -1
                                         ) {
                                             writeFully(buffer, 0, bytesRead)
+                                            flush()
                                         }
                                     }
                                 }

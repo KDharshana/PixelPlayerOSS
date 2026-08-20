@@ -58,6 +58,7 @@ jdom2 = "2.0.6.1"
 jose4j = "0.9.6"
 httpclient = "4.5.14"
 orgJson = "20260522"
+newpipeExtractor = "v0.26.5"
 
 # DI
 dagger = "2.60.1"
@@ -199,6 +200,7 @@ commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "co
 jdom2 = { module = "org.jdom:jdom2", version.ref = "jdom2" }
 jose4j = { module = "org.bitbucket.b_c:jose4j", version.ref = "jose4j" }
 apache-httpclient = { module = "org.apache.httpcomponents:httpclient", version.ref = "httpclient" }
+newpipe-extractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version.ref = "newpipeExtractor" }
 
 
 [plugins]

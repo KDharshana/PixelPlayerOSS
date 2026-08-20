@@ -25,6 +25,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.FlowPreview
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+
 /**
  * Manages search state and operations.
  * Extracted from PlayerViewModel to improve modularity.
@@ -37,6 +43,7 @@ import kotlinx.coroutines.FlowPreview
 @Singleton
 class SearchStateHolder @Inject constructor(
     private val musicRepository: MusicRepository,
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 ) {
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 300L
@@ -53,6 +60,9 @@ class SearchStateHolder @Inject constructor(
     private val _selectedSearchFilter = MutableStateFlow(SearchFilterType.ALL)
     val selectedSearchFilter = _selectedSearchFilter.asStateFlow()
 
+    private val _isLoadingMore = MutableStateFlow(false)
+    val isLoadingMore = _isLoadingMore.asStateFlow()
+
     private val _searchHistory = MutableStateFlow<ImmutableList<SearchHistoryItem>>(persistentListOf())
     val searchHistory = _searchHistory.asStateFlow()
 
@@ -61,6 +71,8 @@ class SearchStateHolder @Inject constructor(
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
     private val latestSearchRequestId = AtomicLong(0L)
+    private var currentContinuationToken: String? = null
+    private var lastQuery: String = ""
 
     private var scope: CoroutineScope? = null
     private var searchJob: Job? = null
@@ -81,6 +93,8 @@ class SearchStateHolder @Inject constructor(
                 .debounce(SEARCH_DEBOUNCE_MS)
                 .collectLatest { request ->
                     val normalizedQuery = request.query
+                    lastQuery = normalizedQuery
+                    currentContinuationToken = null
 
                     if (normalizedQuery.isBlank()) {
                         if (_searchResults.value.isNotEmpty()) {
@@ -91,8 +105,20 @@ class SearchStateHolder @Inject constructor(
 
                     try {
                         val currentFilter = _selectedSearchFilter.value
-                        musicRepository.searchAll(normalizedQuery, currentFilter).collect { resultsList ->
-                            val sortedResults = resultsList.sortedWith(
+                        val localFlow: Flow<List<SearchResultItem>> = musicRepository.searchAll(normalizedQuery, currentFilter)
+                        val ytFlow: Flow<List<SearchResultItem>> = if (currentFilter == SearchFilterType.ALL || currentFilter == SearchFilterType.SONGS) {
+                            flow {
+                                val pageResult = youTubeRepository.searchSongsPaginated(normalizedQuery)
+                                currentContinuationToken = pageResult.continuationToken
+                                emit(pageResult.songs.map { SearchResultItem.SongItem(it) })
+                            }
+                        } else {
+                            flowOf(emptyList())
+                        }
+
+                        combine(localFlow, ytFlow) { localResults: List<SearchResultItem>, ytResults: List<SearchResultItem> ->
+                            android.util.Log.d("YouTubeMusic", "Search results for '$normalizedQuery': local=${localResults.size}, yt=${ytResults.size}")
+                            (localResults + ytResults).sortedWith(
                                 compareBy { result ->
                                     when (result) {
                                         is SearchResultItem.SongItem -> 0
@@ -102,7 +128,7 @@ class SearchStateHolder @Inject constructor(
                                     }
                                 }
                             )
-
+                        }.collect { sortedResults ->
                             if (request.requestId != latestSearchRequestId.get()) {
                                 return@collect
                             }
@@ -123,8 +149,37 @@ class SearchStateHolder @Inject constructor(
         }
     }
 
+    fun loadMoreSearchResults() {
+        val continuation = currentContinuationToken ?: return
+        if (_isLoadingMore.value || lastQuery.isBlank()) return
+
+        scope?.launch {
+            _isLoadingMore.value = true
+            try {
+                val pageResult = youTubeRepository.searchSongsPaginated(lastQuery, continuation)
+                currentContinuationToken = pageResult.continuationToken
+                if (pageResult.songs.isNotEmpty()) {
+                    val existingSongIds = _searchResults.value.mapNotNull { (it as? SearchResultItem.SongItem)?.song?.id }.toSet()
+                    val uniqueNewSongs = pageResult.songs.filter { it.id !in existingSongIds }
+                    if (uniqueNewSongs.isNotEmpty()) {
+                        val newItems = uniqueNewSongs.map { SearchResultItem.SongItem(it) }
+                        _searchResults.value = (_searchResults.value + newItems).toImmutableList()
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Error loading more search results")
+            } finally {
+                _isLoadingMore.value = false
+            }
+        }
+    }
+
     fun updateSearchFilter(filterType: SearchFilterType) {
+        if (_selectedSearchFilter.value == filterType) return
         _selectedSearchFilter.value = filterType
+        if (lastQuery.isNotBlank()) {
+            performSearch(lastQuery)
+        }
     }
 
     fun loadSearchHistory(limit: Int = 15) {

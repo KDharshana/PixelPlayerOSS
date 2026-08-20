@@ -32,7 +32,7 @@ class MusicRepositoryImplTest {
     private val mockMusicDao: MusicDao = mockk()
     private val mockSearchHistoryDao: SearchHistoryDao = mockk(relaxed = true)
     private val mockContext: Context = mockk(relaxed = true)
-    private val mockUserPreferencesRepository: UserPreferencesRepository = mockk()
+    private val mockUserPreferencesRepository: UserPreferencesRepository = mockk(relaxed = true)
     private val mockPlaylistPreferencesRepository: PlaylistPreferencesRepository = mockk(relaxed = true)
     private val mockLyricsRepository: LyricsRepository = mockk(relaxed = true)
     private val mockSongRepository: SongRepository = mockk(relaxed = true)
@@ -54,6 +54,7 @@ class MusicRepositoryImplTest {
         )
         every { mockMusicDao.getAllArtistsRaw() } returns flowOf(dummyArtists)
         coEvery { mockMusicDao.getDistinctParentDirectories() } returns listOf("/music/folder1", "/music/folder2")
+        every { mockMusicDao.getDistinctParentDirectoriesFlow() } returns flowOf(listOf("/music/folder1", "/music/folder2"))
         every { mockMusicDao.getAllSongArtistCrossRefs() } returns flowOf(emptyList())
         every { mockMusicDao.getAllSongs(any(), any()) } answers {
             println("getAllSongs called with: ${args[0]}, ${args[1]}")

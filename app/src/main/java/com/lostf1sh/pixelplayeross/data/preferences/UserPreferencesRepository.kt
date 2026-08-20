@@ -151,6 +151,7 @@ constructor(
         val PERSISTENT_SHUFFLE_ENABLED = booleanPreferencesKey("persistent_shuffle_enabled")
         val RESUME_ON_HEADSET_RECONNECT = booleanPreferencesKey("resume_on_headset_reconnect")
         val SHOW_QUEUE_HISTORY = booleanPreferencesKey("show_queue_history")
+        val INFINITE_AUTOPLAY_ENABLED = booleanPreferencesKey("infinite_autoplay_enabled")
         val PLAYBACK_QUEUE_SNAPSHOT = stringPreferencesKey("playback_queue_snapshot_v1")
         val FULL_PLAYER_SHOW_FILE_INFO = booleanPreferencesKey("full_player_show_file_info")
         val FULL_PLAYER_DELAY_ALL = booleanPreferencesKey("full_player_delay_all")
@@ -203,6 +204,7 @@ constructor(
         val LYRICS_SOURCE_PREFERENCE = stringPreferencesKey("lyrics_source_preference")
         val AUTO_SCAN_LRC_FILES = booleanPreferencesKey("auto_scan_lrc_files")
         val EXTERNAL_LYRICS_ENABLED = booleanPreferencesKey("external_lyrics_enabled")
+        val YOUTUBE_AUTH_COOKIES = stringPreferencesKey("youtube_auth_cookies")
         val EXTERNAL_ARTIST_IMAGES_ENABLED = booleanPreferencesKey("external_artist_images_enabled")
 
         val ALBUM_ART_QUALITY = stringPreferencesKey("album_art_quality")
@@ -624,6 +626,17 @@ constructor(
     suspend fun setAutoScanLrcFiles(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.AUTO_SCAN_LRC_FILES] = enabled
+        }
+    }
+
+    val infiniteAutoplayEnabledFlow: Flow<Boolean> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.INFINITE_AUTOPLAY_ENABLED] ?: true
+        }
+
+    suspend fun setInfiniteAutoplayEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.INFINITE_AUTOPLAY_ENABLED] = enabled
         }
     }
 
@@ -1188,9 +1201,11 @@ constructor(
     val lastStorageFilterFlow: Flow<StorageFilter> =
         dataStore.data.map { preferences ->
             when (preferences[PreferencesKeys.LAST_STORAGE_FILTER]) {
-                "ONLINE"  -> StorageFilter.ONLINE
-                "OFFLINE" -> StorageFilter.OFFLINE
-                else      -> StorageFilter.ALL
+                "ONLINE"        -> StorageFilter.ONLINE
+                "OFFLINE"       -> StorageFilter.OFFLINE
+                "LOCAL_ONLY"    -> StorageFilter.LOCAL_ONLY
+                "YOUTUBE_MUSIC" -> StorageFilter.YOUTUBE_MUSIC
+                else            -> StorageFilter.ALL
             }
         }
 
@@ -1546,6 +1561,21 @@ constructor(
     suspend fun setFolderBackGestureNavigation(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.FOLDER_BACK_GESTURE_NAVIGATION] = enabled
+        }
+    }
+
+    val youTubeAuthCookiesFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_AUTH_COOKIES]
+        }
+
+    suspend fun setYouTubeAuthCookies(cookies: String?) {
+        dataStore.edit { preferences ->
+            if (cookies.isNullOrBlank()) {
+                preferences.remove(PreferencesKeys.YOUTUBE_AUTH_COOKIES)
+            } else {
+                preferences[PreferencesKeys.YOUTUBE_AUTH_COOKIES] = cookies
+            }
         }
     }
 
