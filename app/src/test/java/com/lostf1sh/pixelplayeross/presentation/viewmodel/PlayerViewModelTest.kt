@@ -87,6 +87,8 @@ class PlayerViewModelTest {
     private val mockThemeStateHolder: ThemeStateHolder = mockk(relaxed = true)
     private val mockMultiSelectionStateHolder: MultiSelectionStateHolder = mockk(relaxed = true)
     private val mockPlaylistSelectionStateHolder: PlaylistSelectionStateHolder = mockk(relaxed = true)
+    private val mockSmartPlaylistGenerator: com.lostf1sh.pixelplayeross.data.repository.SmartPlaylistGenerator = mockk(relaxed = true)
+    private val mockYouTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository = mockk(relaxed = true)
     private lateinit var mockMediaControllerFactory: com.lostf1sh.pixelplayeross.data.media.MediaControllerFactory
 
     private val testDispatcher = StandardTestDispatcher()
@@ -229,6 +231,8 @@ class PlayerViewModelTest {
             mockThemeStateHolder,
             mockMultiSelectionStateHolder,
             mockPlaylistSelectionStateHolder,
+            mockSmartPlaylistGenerator,
+            mockYouTubeRepository,
             sessionToken,
             mockMediaControllerFactory
         )

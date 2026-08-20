@@ -43,7 +43,8 @@ import java.util.concurrent.TimeUnit
  * @param K The service-specific song identifier type.
  */
 abstract class CloudStreamProxy<K : Any>(
-    private val okHttpClient: OkHttpClient
+    private val okHttpClient: OkHttpClient,
+    protected val diskCache: StreamDiskCache? = null
 ) {
 
     protected abstract val allowedHostSuffixes: Set<String>
@@ -116,25 +117,6 @@ abstract class CloudStreamProxy<K : Any>(
         return awaitReady(timeoutMs)
     }
 
-    fun getProxyUrl(id: K): String {
-        if (actualPort == 0) return ""
-        if (!validateId(id)) return ""
-        return "http://127.0.0.1:$actualPort$routePrefix/${formatIdForUrl(id)}?t=$sessionToken"
-    }
-
-    /**
-     * Parse a cloud URI (e.g. "navidrome://song-id" or "jellyfin://item-id") and return
-     * the local proxy URL. Returns null if the URI doesn't match this proxy's scheme.
-     */
-    fun resolveUri(uriString: String): String? {
-        val uri = Uri.parse(uriString)
-        if (uri.scheme != uriScheme) return null
-        val rawId = extractIdFromUri(uri) ?: return null
-        val id = parseRouteParam(rawId) ?: return null
-        if (!validateId(id)) return null
-        return getProxyUrl(id)
-    }
-
     fun start() {
         startJob?.cancel()
         startJob = proxyScope.launch {
@@ -153,47 +135,60 @@ abstract class CloudStreamProxy<K : Any>(
         }
     }
 
+    fun resolveUri(uriString: String): String? {
+        val parsedUri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return null
+        if (!parsedUri.scheme.equals(uriScheme, ignoreCase = true)) return null
+
+        val id = extractIdFromUri(parsedUri) ?: return null
+        val typedId = parseRouteParam(id) ?: return null
+        if (!validateId(typedId)) return null
+
+        return toProxyUrl(typedId)
+    }
+
+    open fun extractIdFromUri(uri: Uri): String? {
+        val host = uri.host
+        val path = uri.path?.removePrefix("/")
+        return when {
+            !host.isNullOrBlank() && !path.isNullOrBlank() -> "$host/$path"
+            !host.isNullOrBlank() -> host
+            !path.isNullOrBlank() -> path
+            else -> null
+        }
+    }
+
+    fun toProxyUrl(id: K): String {
+        val port = actualPort
+        val token = sessionToken
+        val formattedId = formatIdForUrl(id)
+        return "http://127.0.0.1:$port$routePrefix/$formattedId?t=$token"
+    }
+
+    @Synchronized
     fun stop() {
-        startJob?.cancel()
-        startJob = null
         proxyScope.coroutineContext.cancelChildren()
+        urlCache.clear()
+        inFlightResolutions.clear()
+        sessionToken = ""
         server?.stop(1000, 2000)
         server = null
         actualPort = 0
-        sessionToken = ""
-        urlCache.clear()
-        Timber.d("$proxyTag stopped")
+        Timber.tag(proxyTag).i("Stopped")
     }
 
-    /** Extract the raw ID string from a parsed URI. Override for custom URI layouts. */
-    protected open fun extractIdFromUri(uri: Uri): String? = uri.host
-
-    /**
-     * Extra headers for the upstream stream request. Lets subclasses send auth tokens as
-     * headers instead of baking them into the cached stream URL (where they'd end up in
-     * URL caches and server access logs).
-     */
     protected open fun upstreamHeaders(): Map<String, String> = emptyMap()
 
     private fun generateSessionToken(): String {
         val bytes = ByteArray(16)
         SecureRandom().nextBytes(bytes)
-        val hex = "0123456789abcdef"
-        val sb = StringBuilder(bytes.size * 2)
-        for (b in bytes) {
-            val v = b.toInt() and 0xFF
-            sb.append(hex[v ushr 4]).append(hex[v and 0x0F])
-        }
-        return sb.toString()
+        return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    /** Constant-time check of the per-session token supplied in the request. */
-    private fun isAuthorized(provided: String?): Boolean {
-        val expected = sessionToken
-        if (expected.isEmpty() || provided.isNullOrEmpty()) return false
+    private fun isAuthorized(token: String?): Boolean {
+        if (token.isNullOrBlank() || sessionToken.isBlank()) return false
         return MessageDigest.isEqual(
-            provided.toByteArray(Charsets.UTF_8),
-            expected.toByteArray(Charsets.UTF_8)
+            token.toByteArray(Charsets.UTF_8),
+            sessionToken.toByteArray(Charsets.UTF_8)
         )
     }
 
@@ -233,6 +228,60 @@ abstract class CloudStreamProxy<K : Any>(
                     }
 
                     try {
+                        val cacheKey = "${uriScheme}_${formatIdForUrl(id)}"
+                        val cachedFile = diskCache?.getCachedFile(cacheKey)
+
+                        if (cachedFile != null && cachedFile.length() > 0) {
+                            val fileLength = cachedFile.length()
+                            val rawRange = call.request.headers["Range"]
+                            if (rawRange != null && rawRange.startsWith("bytes=")) {
+                                val rangeSpec = rawRange.removePrefix("bytes=").trim()
+                                val parts = rangeSpec.split("-")
+                                val start = parts.getOrNull(0)?.toLongOrNull() ?: 0L
+                                val end = parts.getOrNull(1)?.takeIf { it.isNotBlank() }?.toLongOrNull() ?: (fileLength - 1)
+                                val clampedStart = start.coerceIn(0L, fileLength - 1)
+                                val clampedEnd = end.coerceIn(clampedStart, fileLength - 1)
+                                val contentLength = clampedEnd - clampedStart + 1
+
+                                call.response.status(HttpStatusCode.PartialContent)
+                                call.response.header("Accept-Ranges", "bytes")
+                                call.response.header("Content-Range", "bytes $clampedStart-$clampedEnd/$fileLength")
+                                call.response.header("Content-Length", contentLength.toString())
+
+                                call.respondBytesWriter(contentType = ContentType.Audio.Any) {
+                                    withContext(Dispatchers.IO) {
+                                        diskCache.openRangeInputStream(cachedFile, clampedStart, contentLength).use { input ->
+                                            val buffer = ByteArray(64 * 1024)
+                                            var bytesRead: Int
+                                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                                writeFully(buffer, 0, bytesRead)
+                                                flush()
+                                            }
+                                        }
+                                    }
+                                }
+                                return@get
+                            } else {
+                                call.response.status(HttpStatusCode.OK)
+                                call.response.header("Accept-Ranges", "bytes")
+                                call.response.header("Content-Length", fileLength.toString())
+
+                                call.respondBytesWriter(contentType = ContentType.Audio.Any) {
+                                    withContext(Dispatchers.IO) {
+                                        diskCache.openRangeInputStream(cachedFile, 0L, fileLength).use { input ->
+                                            val buffer = ByteArray(64 * 1024)
+                                            var bytesRead: Int
+                                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                                writeFully(buffer, 0, bytesRead)
+                                                flush()
+                                            }
+                                        }
+                                    }
+                                }
+                                return@get
+                            }
+                        }
+
                         val rangeValidation = CloudStreamSecurity.validateRangeHeader(
                             call.request.headers["Range"]
                         )
@@ -319,17 +368,28 @@ abstract class CloudStreamProxy<K : Any>(
                             contentLength?.let { call.response.header("Content-Length", it) }
                             contentRange?.let { call.response.header("Content-Range", it) }
 
+                            val isFullStream = (upstream.code == 200) || (rangeValidation.normalizedHeader == null || rangeValidation.normalizedHeader == "bytes=0-")
+                            val tempCacheFile = if (isFullStream && diskCache != null) diskCache.createTempFile(cacheKey) else null
+                            val cacheOutputStream = tempCacheFile?.let { java.io.FileOutputStream(it) }
+
                             call.respondBytesWriter(contentType = responseContentType) {
                                 withContext(Dispatchers.IO) {
-                                    body.byteStream().use { input ->
-                                        val buffer = ByteArray(64 * 1024)
-                                        var bytesRead: Int
-                                        while (input.read(buffer)
-                                                .also { bytesRead = it } != -1
-                                        ) {
-                                            writeFully(buffer, 0, bytesRead)
-                                            flush()
+                                    try {
+                                        body.byteStream().use { input ->
+                                            val buffer = ByteArray(64 * 1024)
+                                            var bytesRead: Int
+                                            while (input.read(buffer).also { bytesRead = it } != -1) {
+                                                writeFully(buffer, 0, bytesRead)
+                                                flush()
+                                                cacheOutputStream?.write(buffer, 0, bytesRead)
+                                            }
                                         }
+                                        cacheOutputStream?.flush()
+                                    } finally {
+                                        cacheOutputStream?.close()
+                                    }
+                                    if (tempCacheFile != null) {
+                                        diskCache?.commitTempFile(tempCacheFile, cacheKey)
                                     }
                                 }
                             }

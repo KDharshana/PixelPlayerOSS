@@ -8,6 +8,10 @@ import android.os.Build
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /** Schedules and cancels the OS alarm backing the duration sleep timer. */
@@ -135,10 +139,27 @@ class PlaybackTimerController(
         Timber.tag(TAG).d("Sleep timers cancelled")
     }
 
-    /** The scheduled duration alarm fired: stop playback. */
-    fun onDurationSleepTimerExpired() {
+    /** The scheduled duration alarm fired: stop playback with gentle volume fade-out. */
+    fun onDurationSleepTimerExpired(scope: kotlinx.coroutines.CoroutineScope? = null) {
         alarmScheduler.cancel()
-        playerProvider().pause()
+        val player = playerProvider()
+        if (scope == null) {
+            player.pause()
+            return
+        }
+        val originalVolume = player.volume
+        scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            val fadeSteps = 15
+            val stepDelayMs = 200L // 3 seconds total gentle fade
+            val decrement = originalVolume / fadeSteps
+            for (i in 1..fadeSteps) {
+                kotlinx.coroutines.delay(stepDelayMs)
+                player.volume = (originalVolume - (decrement * i)).coerceAtLeast(0f)
+            }
+            player.pause()
+            player.volume = originalVolume
+            Timber.tag(TAG).d("Sleep timer smoothly faded out and paused playback")
+        }
     }
 
     /** Clears the end-of-track timer without touching the duration alarm (e.g. STATE_ENDED). */

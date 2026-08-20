@@ -273,9 +273,30 @@ class PlayerViewModel @Inject constructor(
     val themeStateHolder: ThemeStateHolder,
     val multiSelectionStateHolder: MultiSelectionStateHolder,
     val playlistSelectionStateHolder: PlaylistSelectionStateHolder,
+    private val smartPlaylistGenerator: com.lostf1sh.pixelplayeross.data.repository.SmartPlaylistGenerator,
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
     private val sessionToken: SessionToken,
     private val mediaControllerFactory: com.lostf1sh.pixelplayeross.data.media.MediaControllerFactory
 ) : ViewModel() {
+
+    fun playSmartPlaylist(type: com.lostf1sh.pixelplayeross.data.model.SmartPlaylistType) {
+        viewModelScope.launch {
+            val songs = smartPlaylistGenerator.generateSmartPlaylist(type)
+            if (songs.isNotEmpty()) {
+                playSongs(songs, songs.first(), type.title, type.id)
+            } else {
+                sendToast(context.getString(R.string.no_valid_songs))
+            }
+        }
+    }
+
+    fun playInstantMixForSong(seedSong: Song) {
+        viewModelScope.launch {
+            val radioTracks = youTubeRepository.getRadioTracksForSong(seedSong)
+            val queue = if (radioTracks.isNotEmpty()) listOf(seedSong) + radioTracks else listOf(seedSong)
+            playSongs(queue, seedSong, "${seedSong.title} Mix", null)
+        }
+    }
 
     private val _playerUiState = MutableStateFlow(PlayerUiState())
     val playerUiState: StateFlow<PlayerUiState> = _playerUiState.asStateFlow()
@@ -3785,6 +3806,13 @@ class PlayerViewModel @Inject constructor(
 
     fun seekTo(position: Long) {
         playbackStateHolder.seekTo(position)
+    }
+
+    fun seekRelative(deltaMs: Long) {
+        val current = playbackStateHolder.currentPosition.value
+        val duration = playbackStateHolder.stablePlayerState.value.totalDuration
+        val target = (current + deltaMs).coerceIn(0L, duration.coerceAtLeast(0L))
+        seekTo(target)
     }
 
     fun nextSong() {

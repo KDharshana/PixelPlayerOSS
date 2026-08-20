@@ -12,6 +12,8 @@ import javax.inject.Singleton
 
 import com.lostf1sh.pixelplayeross.data.network.youtube.YouTubeExtractorManager
 
+import com.lostf1sh.pixelplayeross.data.stream.StreamDiskCache
+
 /**
  * Local HTTP proxy server for streaming YouTube Music audio.
  *
@@ -22,8 +24,9 @@ import com.lostf1sh.pixelplayeross.data.network.youtube.YouTubeExtractorManager
 class YouTubeStreamProxy @Inject constructor(
     private val innertubeApiService: InnertubeApiService,
     private val youTubeExtractorManager: YouTubeExtractorManager,
+    diskCache: StreamDiskCache,
     okHttpClient: OkHttpClient
-) : CloudStreamProxy<String>(okHttpClient) {
+) : CloudStreamProxy<String>(okHttpClient, diskCache) {
 
     override val allowedHostSuffixes: Set<String> = setOf(
         "googlevideo.com",

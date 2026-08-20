@@ -526,6 +526,7 @@ fun FullPlayerContent(
             onAlbumClick = { albumSong ->
                 playerViewModel.triggerAlbumNavigationFromPlayer(albumSong.albumId)
             },
+            onSeekRelative = { delta -> playerViewModel.seekRelative(delta) },
             modifier = modifier
         )
     }
@@ -907,6 +908,7 @@ private fun FullPlayerAlbumCoverSection(
     requestedScrollIndex: Int?,
     onSongSelected: (Song, Int) -> Unit,
     onAlbumClick: (Song) -> Unit,
+    onSeekRelative: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val shouldDelay = loadingTweaks.delayAll || loadingTweaks.delayAlbumCarousel
@@ -965,27 +967,34 @@ private fun FullPlayerAlbumCoverSection(
                 }
             }
         ) {
-            AlbumCarouselSection(
-                currentSong = song,
-                queue = currentPlaybackQueue,
-                expansionFraction = 1f,
-                currentMediaItemIndex = currentMediaItemIndex,
-                requestedScrollIndex = requestedScrollIndex,
-                onSongSelected = { newSong, index ->
-                    if (newSong.id != song.id || index != currentMediaItemIndex) {
-                        onSongSelected(newSong, index)
-                    }
-                },
-                onAlbumClick = onAlbumClick,
-                carouselStyle = carouselStyle,
+            DoubleTapSeekOverlay(
+                onSeekRelative = onSeekRelative,
                 modifier = Modifier
+                    .fillMaxWidth()
                     .height(carouselHeight)
-                    .graphicsLayer {
-                        scaleX = albumArtScale
-                        scaleY = albumArtScale
+            ) {
+                AlbumCarouselSection(
+                    currentSong = song,
+                    queue = currentPlaybackQueue,
+                    expansionFraction = 1f,
+                    currentMediaItemIndex = currentMediaItemIndex,
+                    requestedScrollIndex = requestedScrollIndex,
+                    onSongSelected = { newSong, index ->
+                        if (newSong.id != song.id || index != currentMediaItemIndex) {
+                            onSongSelected(newSong, index)
+                        }
                     },
-                albumArtQuality = albumArtQuality
-            )
+                    onAlbumClick = onAlbumClick,
+                    carouselStyle = carouselStyle,
+                    modifier = Modifier
+                        .height(carouselHeight)
+                        .graphicsLayer {
+                            scaleX = albumArtScale
+                            scaleY = albumArtScale
+                        },
+                    albumArtQuality = albumArtQuality
+                )
+            }
         }
     }
 }

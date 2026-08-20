@@ -894,7 +894,7 @@ class MusicService : MediaSessionService() {
                 }
                 ACTION_SLEEP_TIMER_EXPIRED -> {
                     Timber.tag(TAG).d("Sleep timer expired action received. Pausing player.")
-                    playbackTimerController.onDurationSleepTimerExpired()
+                    playbackTimerController.onDurationSleepTimerExpired(serviceScope)
                 }
             }
         }

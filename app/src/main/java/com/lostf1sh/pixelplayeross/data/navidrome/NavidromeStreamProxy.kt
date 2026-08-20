@@ -3,6 +3,7 @@ package com.lostf1sh.pixelplayeross.data.navidrome
 import android.net.Uri
 import com.lostf1sh.pixelplayeross.data.stream.CloudStreamProxy
 import com.lostf1sh.pixelplayeross.data.stream.CloudStreamSecurity
+import com.lostf1sh.pixelplayeross.data.stream.StreamDiskCache
 import kotlinx.coroutines.CancellationException
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -19,8 +20,9 @@ import javax.inject.Singleton
 @Singleton
 class NavidromeStreamProxy @Inject constructor(
     private val repository: NavidromeRepository,
+    diskCache: StreamDiskCache,
     okHttpClient: OkHttpClient
-) : CloudStreamProxy<String>(okHttpClient) {
+) : CloudStreamProxy<String>(okHttpClient, diskCache) {
 
     override val allowedHostSuffixes: Set<String>
         get() = repository.serverUrl?.toHttpUrlOrNull()?.host?.let { setOf(it) } ?: emptySet()

@@ -7,14 +7,16 @@ import kotlinx.coroutines.CancellationException
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import timber.log.Timber
+import com.lostf1sh.pixelplayeross.data.stream.StreamDiskCache
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class JellyfinStreamProxy @Inject constructor(
     private val repository: JellyfinRepository,
+    diskCache: StreamDiskCache,
     okHttpClient: OkHttpClient
-) : CloudStreamProxy<String>(okHttpClient) {
+) : CloudStreamProxy<String>(okHttpClient, diskCache) {
 
     override val allowedHostSuffixes: Set<String>
         get() = repository.serverUrl?.toHttpUrlOrNull()?.host?.let { setOf(it) } ?: emptySet()
