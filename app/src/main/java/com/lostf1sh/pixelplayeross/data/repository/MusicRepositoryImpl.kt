@@ -767,34 +767,42 @@ class MusicRepositoryImpl @Inject constructor(
     }
 
     override suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean) = withContext(Dispatchers.IO) {
-        val id = songId.toLongOrNull() ?: return@withContext
-        if (isFavorite) {
-            favoritesDao.setFavorite(
-                com.lostf1sh.pixelplayeross.data.database.FavoritesEntity(
-                    songId = id,
-                    isFavorite = true
+        val id = songId.toLongOrNull()
+        if (id != null) {
+            if (isFavorite) {
+                favoritesDao.setFavorite(
+                    com.lostf1sh.pixelplayeross.data.database.FavoritesEntity(
+                        songId = id,
+                        isFavorite = true
+                    )
                 )
-            )
-        } else {
-            favoritesDao.removeFavorite(id)
+            } else {
+                favoritesDao.removeFavorite(id)
+            }
         }
+        userPreferencesRepository.setFavoriteSong(songId, isFavorite)
     }
 
     override suspend fun getFavoriteSongIdsOnce(): Set<String> = withContext(Dispatchers.IO) {
-        favoritesDao.getFavoriteSongIdsOnce()
+        val dbIds = favoritesDao.getFavoriteSongIdsOnce()
             .map { it.toString() }
             .toSet()
+        val prefIds = userPreferencesRepository.favoriteSongIdsFlow.first()
+        dbIds + prefIds
     }
 
     override fun getFavoriteSongIdsFlow(): Flow<Set<String>> {
-        return favoritesDao.getFavoriteSongIds()
-            .map { ids -> ids.asSequence().map(Long::toString).toSet() }
-            .distinctUntilChanged()
+        return combine(
+            favoritesDao.getFavoriteSongIds().map { ids -> ids.asSequence().map(Long::toString).toSet() },
+            userPreferencesRepository.favoriteSongIdsFlow
+        ) { dbIds, prefIds ->
+            dbIds + prefIds
+        }.distinctUntilChanged()
     }
 
     override suspend fun toggleFavoriteStatus(songId: String): Boolean = withContext(Dispatchers.IO) {
-        val id = songId.toLongOrNull() ?: return@withContext false
-        val isFav = favoritesDao.isFavorite(id) ?: false
+        val currentFavs = getFavoriteSongIdsOnce()
+        val isFav = currentFavs.contains(songId)
         val newFav = !isFav
         setFavoriteStatus(songId, newFav)
         return@withContext newFav

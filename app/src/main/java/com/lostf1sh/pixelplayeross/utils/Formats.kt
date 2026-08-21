@@ -21,12 +21,23 @@ fun formatDuration(milliseconds: Long): String {
 
 fun formatTotalDuration(songs: List<Song>): String {
     val totalMillis = songs.sumOf { it.duration }
+    if (totalMillis <= 0L && songs.isNotEmpty()) {
+        val estimatedMinutes = (songs.size * 3.5).toLong().coerceAtLeast(1L)
+        val hours = estimatedMinutes / 60
+        val minutes = estimatedMinutes % 60
+        return if (hours > 0) {
+            String.format(Locale.US, "%d h %02d min", hours, minutes)
+        } else {
+            String.format(Locale.US, "%d min", minutes)
+        }
+    }
     val hours = TimeUnit.MILLISECONDS.toHours(totalMillis)
     val minutes = TimeUnit.MILLISECONDS.toMinutes(totalMillis) % 60
     return if (hours > 0) {
         String.format(Locale.US, "%d h %02d min", hours, minutes)
     } else {
-        String.format(Locale.US, "%d min", minutes)
+        val displayMin = if (minutes == 0L && totalMillis > 0L) 1L else minutes
+        String.format(Locale.US, "%d min", displayMin)
     }
 }
 

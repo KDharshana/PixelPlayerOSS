@@ -3204,6 +3204,14 @@ class PlayerViewModel @Inject constructor(
 
     private suspend fun setFavoriteStatusEverywhere(songId: String, isFavorite: Boolean) {
         musicRepository.setFavoriteStatus(songId, isFavorite)
+        val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
+        if (currentSong != null && currentSong.id == songId && (currentSong.youtubeId != null || currentSong.id.startsWith("youtube_"))) {
+            if (isFavorite) {
+                youTubeRepository.saveSong(currentSong, playlistId = "__favorites__")
+            } else {
+                youTubeRepository.deleteSong(songId)
+            }
+        }
     }
 
     fun toggleFavorite() {
@@ -3221,6 +3229,13 @@ class PlayerViewModel @Inject constructor(
             val currentlyFavorite = favoriteSongIds.value.contains(favoriteSongId)
             val targetFavoriteState = if (removing) false else !currentlyFavorite
             setFavoriteStatusEverywhere(favoriteSongId, targetFavoriteState)
+            if (song.youtubeId != null || song.id.startsWith("youtube_")) {
+                if (targetFavoriteState) {
+                    youTubeRepository.saveSong(song, playlistId = "__favorites__")
+                } else {
+                    youTubeRepository.deleteSong(song.id)
+                }
+            }
         }
     }
 
@@ -3253,6 +3268,10 @@ class PlayerViewModel @Inject constructor(
             musicRepository.getSongByPath(candidate)?.id?.takeIf { it.toLongOrNull() != null }?.let {
                 return it
             }
+        }
+
+        if (!song.id.startsWith(EXTERNAL_SONG_ID_PREFIX) && song.id.isNotBlank()) {
+            return song.id
         }
 
         return null

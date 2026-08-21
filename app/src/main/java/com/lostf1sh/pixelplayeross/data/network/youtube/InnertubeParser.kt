@@ -323,16 +323,34 @@ object InnertubeParser {
             }
         }
 
+        // Inspect fixedColumns for duration (vital for album & playlist track views)
+        val fixedColumns = item.optJSONArray("fixedColumns")
+        if (fixedColumns != null) {
+            for (f in 0 until fixedColumns.length()) {
+                val fixedRuns = fixedColumns.optJSONObject(f)
+                    ?.optJSONObject("musicResponsiveListItemFixedColumnRenderer")
+                    ?.optJSONObject("text")
+                    ?.optJSONArray("runs") ?: continue
+                for (k in 0 until fixedRuns.length()) {
+                    val rawText = fixedRuns.optJSONObject(k)?.optString("text", "")?.trim() ?: ""
+                    if (isDuration(rawText)) {
+                        detectedDuration = rawText
+                    }
+                }
+            }
+        }
+
         if (isExplicitVideo) return
 
-        // Extract thumbnail
+        // Extract thumbnail with upgraded resolution
         val thumbnails = item.optJSONObject("thumbnail")
             ?.optJSONObject("musicThumbnailRenderer")
             ?.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
-        val thumbnailUri = thumbnails?.let { arr ->
+        val rawThumbnailUri = thumbnails?.let { arr ->
             if (arr.length() > 0) arr.optJSONObject(arr.length() - 1)?.optString("url") else null
         }
+        val thumbnailUri = upgradeThumbnailUrl(rawThumbnailUri)
 
         // Check if item is a playlist, album, or artist via navigationEndpoint on root or flex columns
         val rootNav = item.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
@@ -490,7 +508,7 @@ object InnertubeParser {
                     ?: hdr.optJSONObject("thumbnail")?.optJSONObject("musicThumbnailRenderer")
                     ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
                 if (thumbs != null && thumbs.length() > 0) {
-                    coverUri = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url")
+                    coverUri = upgradeThumbnailUrl(thumbs.optJSONObject(thumbs.length() - 1)?.optString("url"))
                 }
             }
 
@@ -561,7 +579,7 @@ object InnertubeParser {
                     ?: hdr.optJSONObject("thumbnail")?.optJSONObject("musicThumbnailRenderer")
                     ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
                 if (thumbs != null && thumbs.length() > 0) {
-                    coverUri = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url")
+                    coverUri = upgradeThumbnailUrl(thumbs.optJSONObject(thumbs.length() - 1)?.optString("url"))
                 }
             }
 
@@ -621,7 +639,7 @@ object InnertubeParser {
                     ?: hdr.optJSONObject("foregroundThumbnail")?.optJSONObject("musicThumbnailRenderer")
                     ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
                 if (thumbs != null && thumbs.length() > 0) {
-                    coverUri = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url")
+                    coverUri = upgradeThumbnailUrl(thumbs.optJSONObject(thumbs.length() - 1)?.optString("url"))
                 }
             }
 
@@ -748,7 +766,8 @@ object InnertubeParser {
             ?.optJSONObject("musicThumbnailRenderer")
             ?.optJSONObject("thumbnail")
             ?.optJSONArray("thumbnails")
-        val thumbnail = thumbnails?.let { if (it.length() > 0) it.optJSONObject(it.length() - 1)?.optString("url") else null }
+        val rawThumb = thumbnails?.let { if (it.length() > 0) it.optJSONObject(it.length() - 1)?.optString("url") else null }
+        val thumbnail = upgradeThumbnailUrl(rawThumb)
 
         val navEndpoint = item.optJSONObject("navigationEndpoint")
         val watchEndpoint = navEndpoint?.optJSONObject("watchEndpoint")
@@ -880,9 +899,10 @@ object InnertubeParser {
                     ?.optJSONObject("thumbnails")
                     ?: item.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
 
-                val thumbnailUri = if (thumbnails is JSONArray && thumbnails.length() > 0) {
+                val rawThumb = if (thumbnails is JSONArray && thumbnails.length() > 0) {
                     thumbnails.optJSONObject(thumbnails.length() - 1)?.optString("url")
                 } else null
+                val thumbnailUri = upgradeThumbnailUrl(rawThumb)
 
                 tracks.add(
                     InnertubeTrack(
@@ -899,5 +919,28 @@ object InnertubeParser {
             Timber.tag(TAG).w(e, "Failed to parse radio tracks")
         }
         return tracks
+    }
+
+    /**
+     * Upgrades low-resolution YouTube Music thumbnails to crystal clear high-resolution variants.
+     */
+    fun upgradeThumbnailUrl(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        return when {
+            url.contains("googleusercontent.com") || url.contains("ggpht.com") -> {
+                url.replace(Regex("=w\\d+-h\\d+.*"), "=w1024-h1024-l90-rj")
+                    .replace(Regex("=s\\d+.*"), "=s1024")
+            }
+            url.contains("i.ytimg.com") -> {
+                val match = Regex("/vi/([^/]+)/").find(url)
+                if (match != null) {
+                    val videoId = match.groupValues[1]
+                    "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
+                } else {
+                    url.substringBefore("?")
+                }
+            }
+            else -> url
+        }
     }
 }

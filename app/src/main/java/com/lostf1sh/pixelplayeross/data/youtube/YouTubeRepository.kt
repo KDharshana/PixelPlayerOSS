@@ -267,11 +267,15 @@ class YouTubeRepository @Inject constructor(
      * Saves a YouTube Music track to the local database library.
      */
     suspend fun saveTrackToLibrary(song: Song) = withContext(Dispatchers.IO) {
+        saveSong(song, playlistId = "__library__")
+    }
+
+    suspend fun saveSong(song: Song, playlistId: String = "__library__") = withContext(Dispatchers.IO) {
         val videoId = song.youtubeId ?: song.contentUriString.removePrefix("youtube://")
         val entity = YouTubeSongEntity(
             id = song.id,
             videoId = videoId,
-            playlistId = "__library__",
+            playlistId = playlistId,
             title = song.title,
             artist = song.artist,
             album = song.album,
@@ -287,6 +291,10 @@ class YouTubeRepository @Inject constructor(
      * Removes a track from the local cached YouTube library.
      */
     suspend fun removeTrackFromLibrary(songId: String) = withContext(Dispatchers.IO) {
+        deleteSong(songId)
+    }
+
+    suspend fun deleteSong(songId: String) = withContext(Dispatchers.IO) {
         youTubeDao.deleteSong(songId)
     }
 
