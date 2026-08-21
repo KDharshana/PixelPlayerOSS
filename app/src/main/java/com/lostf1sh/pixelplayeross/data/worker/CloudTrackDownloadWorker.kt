@@ -38,7 +38,12 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
     baseOkHttpClient: OkHttpClient
 ) : CoroutineWorker(appContext, workerParams) {
     private val client = baseOkHttpClient.newBuilder()
-        .readTimeout(5, TimeUnit.MINUTES)
+        .dispatcher(okhttp3.Dispatcher().apply {
+            maxRequests = 64
+            maxRequestsPerHost = 32
+        })
+        .connectionPool(okhttp3.ConnectionPool(32, 5, TimeUnit.MINUTES))
+        .readTimeout(2, TimeUnit.MINUTES)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
@@ -96,11 +101,11 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
                         "${CloudOfflineRepository.attemptFileStem(downloadId, attemptId)}.$extension"
                     )
                 var copied = 0L
-                var lastPublished = 0L
+                var lastPublishedTime = 0L
 
                 body.byteStream().use { input ->
-                    tempFile.outputStream().buffered().use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 8)
+                    tempFile.outputStream().buffered(128 * 1024).use { output ->
+                        val buffer = ByteArray(128 * 1024)
                         while (true) {
                             coroutineContext.ensureActive()
                             val count = input.read(buffer)
@@ -110,16 +115,17 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
                             if (copied > CloudStreamSecurity.MAX_STREAM_CONTENT_LENGTH_BYTES) {
                                 throw IOException("Audio file is too large")
                             }
-                            if (copied - lastPublished >= PROGRESS_STEP_BYTES) {
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastPublishedTime >= 500L) {
                                 publishProgress(downloadId, attemptId, copied, total)
-                                lastPublished = copied
+                                lastPublishedTime = currentTime
                             }
                         }
                     }
                 }
 
                 if (copied <= 0L) throw IOException("Downloaded file is empty")
-                if (total != null && copied != total) {
+                if (total != null && copied < total) {
                     throw IOException("Download ended early ($copied/$total bytes)")
                 }
                 coroutineContext.ensureActive()

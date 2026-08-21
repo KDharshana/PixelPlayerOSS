@@ -96,12 +96,12 @@ class YouTubeRepository @Inject constructor(
      * Resolves the direct audio stream URL for a given YouTube video ID.
      */
     suspend fun getStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
-        val extractedUrl = runCatching { youTubeExtractorManager.extractAudioStreamUrl(videoId) }.getOrNull()
-        if (!extractedUrl.isNullOrBlank()) {
-            return@withContext extractedUrl
+        val streamInfo = runCatching { innertubeApiService.getStreamInfo(videoId) }.getOrNull()
+        val fastUrl = streamInfo?.selectedFormatUrl ?: streamInfo?.highestBitrateOpusUrl ?: streamInfo?.highestBitrateAacUrl
+        if (!fastUrl.isNullOrBlank()) {
+            return@withContext fastUrl
         }
-        val streamInfo = innertubeApiService.getStreamInfo(videoId)
-        streamInfo?.selectedFormatUrl ?: streamInfo?.highestBitrateOpusUrl ?: streamInfo?.highestBitrateAacUrl
+        runCatching { youTubeExtractorManager.extractAudioStreamUrl(videoId) }.getOrNull()
     }
 
     /**
