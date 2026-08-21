@@ -114,9 +114,7 @@ class SearchStateHolder @Inject constructor(
                             musicRepository.searchAll(normalizedQuery, currentFilter).collect { localList ->
                                 if (request.requestId != latestSearchRequestId.get()) return@collect
                                 currentLocalResults = localList
-                                if (_searchResults.value.isEmpty() || _searchResults.value.all { it in localList }) {
-                                    _searchResults.value = localList.toImmutableList()
-                                }
+                                _searchResults.value = localList.toImmutableList()
                             }
                         } catch (_: CancellationException) {
                         } catch (e: Exception) {
@@ -135,10 +133,10 @@ class SearchStateHolder @Inject constructor(
 
                             val combined = (currentLocalResults + ytResult.items).distinctBy { item ->
                                 when (item) {
-                                    is SearchResultItem.SongItem -> "song_${item.song.title.lowercase()}_${item.song.artist.lowercase()}"
-                                    is SearchResultItem.AlbumItem -> "album_${item.album.title.lowercase()}_${item.album.artist.lowercase()}"
-                                    is SearchResultItem.ArtistItem -> "artist_${item.artist.name.lowercase()}"
-                                    is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.name.lowercase()}"
+                                    is SearchResultItem.SongItem -> "song_${item.song.id}_${item.song.title.lowercase().trim()}_${item.song.artist.lowercase().trim()}"
+                                    is SearchResultItem.AlbumItem -> "album_${item.album.id}"
+                                    is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
+                                    is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
                                 }
                             }.sortedWith(
                                 compareBy { result ->

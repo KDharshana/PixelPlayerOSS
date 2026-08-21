@@ -160,6 +160,29 @@ class YouTubeRepository @Inject constructor(
     }
 
     /**
+     * Fetches details and songs for an online YouTube playlist.
+     */
+    suspend fun getPlaylist(playlistId: String): Pair<com.lostf1sh.pixelplayeross.data.model.Playlist, List<Song>>? = withContext(Dispatchers.IO) {
+        try {
+            val result = innertubeApiService.getPlaylist(playlistId) ?: return@withContext null
+            val (innertubePlaylist, innertubeTracks) = result
+            val songs = innertubeTracks.map { it.toDomainSong() }
+            val playlist = innertubePlaylist.toDomainPlaylist().copy(
+                songIds = songs.map { it.id }
+            )
+            songs.forEach { song ->
+                try {
+                    saveTrackToLibrary(song)
+                } catch (_: Exception) {}
+            }
+            Pair(playlist, songs)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error loading playlist: $playlistId")
+            null
+        }
+    }
+
+    /**
      * Searches YouTube Music for songs matching the query.
      */
     fun searchSongs(query: String): Flow<List<Song>> = flow {

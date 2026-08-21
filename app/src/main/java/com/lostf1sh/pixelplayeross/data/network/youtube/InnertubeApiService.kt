@@ -328,6 +328,29 @@ class InnertubeApiService @Inject constructor(
         }
     }
 
+    suspend fun getPlaylist(playlistId: String): Pair<InnertubePlaylist, List<InnertubeTrack>>? = withContext(Dispatchers.IO) {
+        val actualBrowseId = if (!playlistId.startsWith("VL") && playlistId.startsWith("PL")) "VL$playlistId" else playlistId
+        android.util.Log.d("YouTubeMusic", "getPlaylist requested: $playlistId -> $actualBrowseId")
+        try {
+            val body = JSONObject().apply {
+                put("context", createBaseContext())
+                put("browseId", actualBrowseId)
+            }
+            val request = buildRequest("browse", body)
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                android.util.Log.w("YouTubeMusic", "Playlist browse API error: ${response.code}")
+                return@withContext null
+            }
+            val responseBody = response.body?.string() ?: return@withContext null
+            extractVisitorData(responseBody)
+            InnertubeParser.parsePlaylistDetails(playlistId, responseBody)
+        } catch (e: Exception) {
+            android.util.Log.e("YouTubeMusic", "Error fetching playlist for: $playlistId", e)
+            null
+        }
+    }
+
     suspend fun getTranscriptLyrics(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             val body = JSONObject().apply {

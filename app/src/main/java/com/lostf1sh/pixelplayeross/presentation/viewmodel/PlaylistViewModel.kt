@@ -84,6 +84,7 @@ class PlaylistViewModel @Inject constructor(
     private val m3uManager: M3uManager,
     private val nlpPlaylistGenerator: NlpPlaylistGenerator,
     private val cloudOfflineRepository: com.lostf1sh.pixelplayeross.data.offline.CloudOfflineRepository,
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -267,14 +268,29 @@ class PlaylistViewModel @Inject constructor(
                             )
                         }
                     } else {
-                        Timber.tag("PlaylistVM").w("Playlist with id $playlistId not found.")
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                playlistNotFound = true,
-                                currentPlaylistDetails = null,
-                                currentPlaylistSongs = emptyList()
-                            )
+                        val onlineResult = withContext(Dispatchers.IO) {
+                            youTubeRepository.getPlaylist(playlistId)
+                        }
+                        if (onlineResult != null) {
+                            val (onlinePlaylist, onlineSongs) = onlineResult
+                            _uiState.update {
+                                it.copy(
+                                    currentPlaylistDetails = onlinePlaylist,
+                                    currentPlaylistSongs = onlineSongs,
+                                    isLoading = false,
+                                    playlistNotFound = false
+                                )
+                            }
+                        } else {
+                            Timber.tag("PlaylistVM").w("Playlist with id $playlistId not found.")
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    playlistNotFound = true,
+                                    currentPlaylistDetails = null,
+                                    currentPlaylistSongs = emptyList()
+                                )
+                            }
                         }
                     }
                 }

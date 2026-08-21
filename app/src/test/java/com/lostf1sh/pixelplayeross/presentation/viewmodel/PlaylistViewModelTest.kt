@@ -30,6 +30,7 @@ class PlaylistViewModelTest {
     private val m3uManager: M3uManager = mockk(relaxed = true)
     private val nlpPlaylistGenerator: NlpPlaylistGenerator = mockk(relaxed = true)
     private val cloudOfflineRepository: CloudOfflineRepository = mockk(relaxed = true)
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository = mockk(relaxed = true)
     private val context: Context = mockk(relaxed = true)
 
     private val testDispatcher = StandardTestDispatcher()
@@ -49,6 +50,7 @@ class PlaylistViewModelTest {
             m3uManager,
             nlpPlaylistGenerator,
             cloudOfflineRepository,
+            youTubeRepository,
             context
         )
     }
