@@ -351,6 +351,50 @@ class InnertubeApiService @Inject constructor(
         }
     }
 
+    suspend fun getAlbum(browseId: String): Pair<InnertubeAlbum, List<InnertubeTrack>>? = withContext(Dispatchers.IO) {
+        android.util.Log.d("YouTubeMusic", "getAlbum requested: $browseId")
+        try {
+            val body = JSONObject().apply {
+                put("context", createBaseContext())
+                put("browseId", browseId)
+            }
+            val request = buildRequest("browse", body)
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                android.util.Log.w("YouTubeMusic", "Album browse API error: ${response.code}")
+                return@withContext null
+            }
+            val responseBody = response.body?.string() ?: return@withContext null
+            extractVisitorData(responseBody)
+            InnertubeParser.parseAlbumDetails(browseId, responseBody)
+        } catch (e: Exception) {
+            android.util.Log.e("YouTubeMusic", "Error fetching album for: $browseId", e)
+            null
+        }
+    }
+
+    suspend fun getArtist(browseId: String): Pair<InnertubeArtist, List<InnertubeTrack>>? = withContext(Dispatchers.IO) {
+        android.util.Log.d("YouTubeMusic", "getArtist requested: $browseId")
+        try {
+            val body = JSONObject().apply {
+                put("context", createBaseContext())
+                put("browseId", browseId)
+            }
+            val request = buildRequest("browse", body)
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                android.util.Log.w("YouTubeMusic", "Artist browse API error: ${response.code}")
+                return@withContext null
+            }
+            val responseBody = response.body?.string() ?: return@withContext null
+            extractVisitorData(responseBody)
+            InnertubeParser.parseArtistDetails(browseId, responseBody)
+        } catch (e: Exception) {
+            android.util.Log.e("YouTubeMusic", "Error fetching artist for: $browseId", e)
+            null
+        }
+    }
+
     suspend fun getTranscriptLyrics(videoId: String): String? = withContext(Dispatchers.IO) {
         try {
             val body = JSONObject().apply {

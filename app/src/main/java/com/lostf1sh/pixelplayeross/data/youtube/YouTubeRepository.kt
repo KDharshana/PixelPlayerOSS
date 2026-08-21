@@ -88,20 +88,29 @@ class YouTubeRepository @Inject constructor(
         if (query.isBlank() && continuation.isNullOrBlank()) {
             return@withContext YouTubeMultiPageResult(emptyList(), null)
         }
-        val params = when (filterType) {
-            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALL -> null
-            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.SONGS -> InnertubeApiService.YTM_FILTER_SONGS
-            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALBUMS -> InnertubeApiService.YTM_FILTER_ALBUMS
-            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ARTISTS -> InnertubeApiService.YTM_FILTER_ARTISTS
-            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.PLAYLISTS -> InnertubeApiService.YTM_FILTER_PLAYLISTS
+        val (effectiveParams, effectiveContinuation) = when {
+            continuation == "ALL_FALLBACK_SONGS" -> Pair(InnertubeApiService.YTM_FILTER_SONGS, null)
+            else -> {
+                val p = when (filterType) {
+                    com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALL -> null
+                    com.lostf1sh.pixelplayeross.data.model.SearchFilterType.SONGS -> InnertubeApiService.YTM_FILTER_SONGS
+                    com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALBUMS -> InnertubeApiService.YTM_FILTER_ALBUMS
+                    com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ARTISTS -> InnertubeApiService.YTM_FILTER_ARTISTS
+                    com.lostf1sh.pixelplayeross.data.model.SearchFilterType.PLAYLISTS -> InnertubeApiService.YTM_FILTER_PLAYLISTS
+                }
+                Pair(p, continuation)
+            }
         }
-        val result = innertubeApiService.search(query, params, continuation)
+        val result = innertubeApiService.search(query, effectiveParams, effectiveContinuation)
         val items = mutableListOf<com.lostf1sh.pixelplayeross.data.model.SearchResultItem>()
         result.songs.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.SongItem(it.toDomainSong())) }
         result.albums.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.AlbumItem(it.toDomainAlbum())) }
         result.artists.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.ArtistItem(it.toDomainArtist())) }
         result.playlists.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.PlaylistItem(it.toDomainPlaylist())) }
-        YouTubeMultiPageResult(items, result.continuationToken)
+
+        val nextToken = result.continuationToken ?: if (filterType == com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALL && continuation == null) "ALL_FALLBACK_SONGS" else null
+
+        YouTubeMultiPageResult(items, nextToken)
     }
 
     /**
@@ -301,8 +310,58 @@ class YouTubeRepository @Inject constructor(
         )
     }
 
+    /**
+     * Fetches details and songs for an online YouTube album.
+     */
+    suspend fun getAlbumDetails(albumId: Long): Pair<com.lostf1sh.pixelplayeross.data.model.Album, List<Song>>? = withContext(Dispatchers.IO) {
+        val cached = onlineAlbumsCache[albumId] ?: return@withContext null
+        try {
+            val result = innertubeApiService.getAlbum(cached.browseId)
+            val songs = if (result != null && result.second.isNotEmpty()) {
+                result.second.map { it.toDomainSong() }
+            } else {
+                val searchResult = innertubeApiService.search("${cached.title} ${cached.artist}", InnertubeApiService.YTM_FILTER_SONGS)
+                searchResult.songs.map { it.toDomainSong() }
+            }
+            songs.forEach { song ->
+                try { saveTrackToLibrary(song) } catch (_: Exception) {}
+            }
+            Pair(cached.toDomainAlbum().copy(songCount = songs.size), songs)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error loading album details: $albumId")
+            null
+        }
+    }
+
+    /**
+     * Fetches details and top songs for an online YouTube artist.
+     */
+    suspend fun getArtistDetails(artistId: Long): Pair<com.lostf1sh.pixelplayeross.data.model.Artist, List<Song>>? = withContext(Dispatchers.IO) {
+        val cached = onlineArtistsCache[artistId] ?: return@withContext null
+        try {
+            val result = innertubeApiService.getArtist(cached.browseId)
+            val songs = if (result != null && result.second.isNotEmpty()) {
+                result.second.map { it.toDomainSong() }
+            } else {
+                val searchResult = innertubeApiService.search(cached.name, InnertubeApiService.YTM_FILTER_SONGS)
+                searchResult.songs.map { it.toDomainSong() }
+            }
+            songs.forEach { song ->
+                try { saveTrackToLibrary(song) } catch (_: Exception) {}
+            }
+            Pair(cached.toDomainArtist().copy(songCount = songs.size), songs)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error loading artist details: $artistId")
+            null
+        }
+    }
+
+    private val onlineArtistsCache = java.util.concurrent.ConcurrentHashMap<Long, InnertubeArtist>()
+    private val onlineAlbumsCache = java.util.concurrent.ConcurrentHashMap<Long, InnertubeAlbum>()
+
     private fun InnertubeAlbum.toDomainAlbum(): com.lostf1sh.pixelplayeross.data.model.Album {
-        val calculatedId = -Math.abs(browseId.hashCode().toLong())
+        val calculatedId = -Math.abs(browseId.hashCode().toLong().takeIf { it != 0L } ?: 1L)
+        onlineAlbumsCache[calculatedId] = this
         return com.lostf1sh.pixelplayeross.data.model.Album(
             id = calculatedId,
             title = title,
@@ -316,7 +375,8 @@ class YouTubeRepository @Inject constructor(
     }
 
     private fun InnertubeArtist.toDomainArtist(): com.lostf1sh.pixelplayeross.data.model.Artist {
-        val calculatedId = -Math.abs(browseId.hashCode().toLong())
+        val calculatedId = -Math.abs(browseId.hashCode().toLong().takeIf { it != 0L } ?: 1L)
+        onlineArtistsCache[calculatedId] = this
         return com.lostf1sh.pixelplayeross.data.model.Artist(
             id = calculatedId,
             name = name,

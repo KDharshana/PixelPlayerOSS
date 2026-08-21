@@ -11,15 +11,17 @@ import com.lostf1sh.pixelplayeross.data.offline.CloudOfflineRepository
 import com.lostf1sh.pixelplayeross.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -35,6 +37,7 @@ class AlbumDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
     private val cloudOfflineRepository: CloudOfflineRepository,
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -69,33 +72,45 @@ class AlbumDetailViewModel @Inject constructor(
                 val albumSongsFlow = musicRepository.getSongsForAlbum(id)
 
                 combine(albumDetailsFlow, albumSongsFlow) { album, songs ->
-                    if (album != null) {
-                        AlbumDetailUiState(
-                            album = album,
-                            songs = songs.sortedWith(
-                                compareBy<Song> { it.discNumber ?: 1 }
-                                    .thenBy { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
-                                    .thenBy { it.title.lowercase() }
-                            ),
-                            isLoading = false
-                        )
-                    } else {
-                        AlbumDetailUiState(
-                            error = context.getString(R.string.album_not_found),
-                            isLoading = false
-                        )
-                    }
+                    album to songs
                 }
                     .catch { e ->
-                        emit(
-                            AlbumDetailUiState(
+                        _uiState.update {
+                            it.copy(
                                 error = context.getString(R.string.error_loading_album, e.localizedMessage ?: ""),
                                 isLoading = false
                             )
-                        )
+                        }
                     }
-                    .collect { newState ->
-                        _uiState.value = newState
+                    .collect { (album, songs) ->
+                        if (album != null) {
+                            _uiState.value = AlbumDetailUiState(
+                                album = album,
+                                songs = songs.sortedWith(
+                                    compareBy<Song> { it.discNumber ?: 1 }
+                                        .thenBy { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
+                                        .thenBy { it.title.lowercase() }
+                                ),
+                                isLoading = false
+                            )
+                        } else {
+                            val onlineResult = withContext(Dispatchers.IO) {
+                                youTubeRepository.getAlbumDetails(id)
+                            }
+                            if (onlineResult != null) {
+                                val (onlineAlbum, onlineSongs) = onlineResult
+                                _uiState.value = AlbumDetailUiState(
+                                    album = onlineAlbum,
+                                    songs = onlineSongs,
+                                    isLoading = false
+                                )
+                            } else {
+                                _uiState.value = AlbumDetailUiState(
+                                    error = context.getString(R.string.album_not_found),
+                                    isLoading = false
+                                )
+                            }
+                        }
                     }
 
             } catch (e: Exception) {

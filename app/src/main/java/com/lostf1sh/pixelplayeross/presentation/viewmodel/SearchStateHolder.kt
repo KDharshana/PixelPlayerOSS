@@ -131,23 +131,7 @@ class SearchStateHolder @Inject constructor(
 
                             currentContinuationToken = ytResult.continuationToken
 
-                            val combined = (currentLocalResults + ytResult.items).distinctBy { item ->
-                                when (item) {
-                                    is SearchResultItem.SongItem -> "song_${item.song.id}_${item.song.title.lowercase().trim()}_${item.song.artist.lowercase().trim()}"
-                                    is SearchResultItem.AlbumItem -> "album_${item.album.id}"
-                                    is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
-                                    is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
-                                }
-                            }.sortedWith(
-                                compareBy { result ->
-                                    when (result) {
-                                        is SearchResultItem.SongItem -> 0
-                                        is SearchResultItem.AlbumItem -> 1
-                                        is SearchResultItem.ArtistItem -> 2
-                                        is SearchResultItem.PlaylistItem -> 3
-                                    }
-                                }
-                            )
+                            val combined = (currentLocalResults + ytResult.items).distinctBy { it.dedupKey() }
 
                             _searchResults.value = combined.toImmutableList()
                         } catch (_: CancellationException) {
@@ -161,6 +145,13 @@ class SearchStateHolder @Inject constructor(
                     }
                 }
         }
+    }
+
+    private fun SearchResultItem.dedupKey(): String = when (this) {
+        is SearchResultItem.SongItem -> "song_${song.id}_${song.title.lowercase().trim()}_${song.artist.lowercase().trim()}"
+        is SearchResultItem.AlbumItem -> "album_${album.id}"
+        is SearchResultItem.ArtistItem -> "artist_${artist.id}"
+        is SearchResultItem.PlaylistItem -> "playlist_${playlist.id}"
     }
 
     fun loadMoreSearchResults() {
@@ -177,24 +168,8 @@ class SearchStateHolder @Inject constructor(
                 )
                 currentContinuationToken = pageResult.continuationToken
                 if (pageResult.items.isNotEmpty()) {
-                    val existingKeys = _searchResults.value.map { item ->
-                        when (item) {
-                            is SearchResultItem.SongItem -> "song_${item.song.id}"
-                            is SearchResultItem.AlbumItem -> "album_${item.album.id}"
-                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
-                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
-                        }
-                    }.toSet()
-
-                    val newUniqueItems = pageResult.items.filter { item ->
-                        val key = when (item) {
-                            is SearchResultItem.SongItem -> "song_${item.song.id}"
-                            is SearchResultItem.AlbumItem -> "album_${item.album.id}"
-                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
-                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
-                        }
-                        key !in existingKeys
-                    }
+                    val existingKeys = _searchResults.value.map { it.dedupKey() }.toSet()
+                    val newUniqueItems = pageResult.items.filter { it.dedupKey() !in existingKeys }
 
                     if (newUniqueItems.isNotEmpty()) {
                         _searchResults.value = (_searchResults.value + newUniqueItems).toImmutableList()
@@ -211,6 +186,7 @@ class SearchStateHolder @Inject constructor(
     fun updateSearchFilter(filterType: SearchFilterType) {
         if (_selectedSearchFilter.value == filterType) return
         _selectedSearchFilter.value = filterType
+        currentContinuationToken = null
         if (lastQuery.isNotBlank()) {
             performSearch(lastQuery)
         }

@@ -709,25 +709,6 @@ fun SearchResultsList(
         return
     }
 
-    val groupedResults = remember(results) {
-        results.groupBy { item ->
-            when (item) {
-                is SearchResultItem.SongItem -> SearchFilterType.SONGS
-                is SearchResultItem.AlbumItem -> SearchFilterType.ALBUMS
-                is SearchResultItem.ArtistItem -> SearchFilterType.ARTISTS
-                is SearchResultItem.PlaylistItem -> SearchFilterType.PLAYLISTS
-            }
-        }
-    }
-    val songResultsQueue = remember(groupedResults) {
-        buildList {
-            groupedResults[SearchFilterType.SONGS]
-                ?.forEach { item ->
-                    val song = (item as? SearchResultItem.SongItem)?.song ?: return@forEach
-                    add(song)
-                }
-        }
-    }
     val searchQueueName = remember(searchQuery) {
         searchQuery.trim()
             .takeIf { it.isNotEmpty() }
@@ -740,13 +721,6 @@ fun SearchResultsList(
             onItemSelected()
         }
     }
-
-    val sectionOrder = listOf(
-        SearchFilterType.SONGS,
-        SearchFilterType.ALBUMS,
-        SearchFilterType.ARTISTS,
-        SearchFilterType.PLAYLISTS
-    )
 
     val imePadding = WindowInsets.ime.getBottom(localDensity).dp
     val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 94.dp
@@ -781,150 +755,131 @@ fun SearchResultsList(
             bottom = if (imePadding <= 8.dp) (MiniPlayerHeight + systemBarPaddingBottom) else imePadding
         )
     ) {
-        sectionOrder.forEach { filterType ->
-            val itemsForSection = groupedResults[filterType] ?: emptyList()
-
-            if (itemsForSection.isNotEmpty()) {
-                item(key = "header_${filterType.name}") {
-                    SearchResultSectionHeader(
-                        title = when (filterType) {
-                            SearchFilterType.SONGS -> "Songs"
-                            SearchFilterType.ALBUMS -> "Albums"
-                            SearchFilterType.ARTISTS -> "Artists"
-                            SearchFilterType.PLAYLISTS -> "Playlists"
-                            else -> "Results"
-                        }
-                    )
+        items(
+            count = results.size,
+            key = { index ->
+                when (val item = results[index]) {
+                    is SearchResultItem.SongItem -> "song_${item.song.id}_$index"
+                    is SearchResultItem.AlbumItem -> "album_${item.album.id}_$index"
+                    is SearchResultItem.ArtistItem -> "artist_${item.artist.id}_$index"
+                    is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}_$index"
                 }
-
-                items(
-                    count = itemsForSection.size,
-                    key = { index ->
-                        val item = itemsForSection[index]
-                        when (item) {
-                            is SearchResultItem.SongItem -> "song_${item.song.id}"
-                            is SearchResultItem.AlbumItem -> "album_${item.album.id}"
-                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
-                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}_${index}"
-                        }
-                    },
-                    contentType = { index ->
-                        when (itemsForSection[index]) {
-                            is SearchResultItem.SongItem -> "search_song"
-                            is SearchResultItem.AlbumItem -> "search_album"
-                            is SearchResultItem.ArtistItem -> "search_artist"
-                            is SearchResultItem.PlaylistItem -> "search_playlist"
-                        }
+            },
+            contentType = { index ->
+                when (results[index]) {
+                    is SearchResultItem.SongItem -> "search_song"
+                    is SearchResultItem.AlbumItem -> "search_album"
+                    is SearchResultItem.ArtistItem -> "search_artist"
+                    is SearchResultItem.PlaylistItem -> "search_playlist"
+                }
+            }
+        ) { index ->
+            val item = results[index]
+            Box(modifier = Modifier.padding(bottom = 8.dp)) {
+                when (item) {
+                    is SearchResultItem.SongItem -> {
+                        EnhancedSongListItem(
+                            song = item.song,
+                            isPlaying = isPlaying,
+                            isCurrentSong = currentPlayingSongId == item.song.id,
+                            onMoreOptionsClick = onSongMoreOptionsClick,
+                            onClick = { onSongResultClick(item.song) }
+                        )
                     }
-                ) { index ->
-                    val item = itemsForSection[index]
-                    Box(modifier = Modifier.padding(bottom = 12.dp)) {
-                        when (item) {
-                            is SearchResultItem.SongItem -> {
-                                EnhancedSongListItem(
-                                    song = item.song,
-                                    isPlaying = isPlaying,
-                                    isCurrentSong = currentPlayingSongId == item.song.id,
-                                    onMoreOptionsClick = onSongMoreOptionsClick,
-                                    onClick = { onSongResultClick(item.song) }
-                                )
-                            }
 
-                            is SearchResultItem.AlbumItem -> {
-                                val onPlayClick = remember(item.album, playerViewModel, onItemSelected) {
-                                    {
-                                        Timber.tag("SearchScreen")
-                                            .d("Album clicked: ${item.album.title}")
-                                        playerViewModel.playAlbum(item.album)
-                                        onItemSelected()
-                                    }
-                                }
-                                val onOpenClick = remember(
-                                    item.album,
-                                    playerViewModel, onItemSelected
-                                ) {
-                                    {
-                                        navController.navigateSafelyReplacing(
-                                            route = Screen.AlbumDetail.createRoute(item.album.id),
-                                            patternToPop = Screen.AlbumDetail.route
-                                        )
-                                        onItemSelected()
-                                    }
-                                }
-                                SearchResultAlbumItem(
-                                    album = item.album,
-                                    onPlayClick = onPlayClick,
-                                    onOpenClick = onOpenClick
-                                )
-                            }
-
-                            is SearchResultItem.ArtistItem -> {
-                                val onPlayClick = remember(item.artist, playerViewModel, onItemSelected) {
-                                    {
-                                        Timber.tag("SearchScreen")
-                                            .d("Artist clicked: ${item.artist.name}")
-                                        playerViewModel.playArtist(item.artist)
-                                        onItemSelected()
-                                    }
-                                }
-                                val onOpenClick = remember(
-                                    item.artist,
-                                    playerViewModel, onItemSelected
-                                ) {
-                                    {
-                                        navController.navigateSafelyReplacing(
-                                            route = Screen.ArtistDetail.createRoute(item.artist.id),
-                                            patternToPop = Screen.ArtistDetail.route
-                                        )
-                                        onItemSelected()
-                                    }
-                                }
-                                SearchResultArtistItem(
-                                    artist = item.artist,
-                                    onPlayClick = onPlayClick,
-                                    onOpenClick = onOpenClick
-                                )
-                            }
-
-                            is SearchResultItem.PlaylistItem -> {
-                                val playlistSongs by remember(item.playlist.songIds, playerViewModel) {
-                                    playerViewModel.observeSongs(item.playlist.songIds)
-                                        .map { it.toImmutableList() }
-                                }.collectAsStateWithLifecycle(initialValue = persistentListOf())
-                                val coroutineScope = rememberCoroutineScope()
-                                val onPlayClick: () -> Unit = {
-                                    coroutineScope.launch {
-                                        val songs = playerViewModel.getSongs(item.playlist.songIds)
-                                        if (songs.isNotEmpty()) {
-                                            playerViewModel.playSongs(
-                                                songs,
-                                                songs.first(),
-                                                item.playlist.name
-                                            )
-                                            if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
-                                        } else {
-                                            playerViewModel.sendToast("Empty playlist")
-                                        }
-                                        onItemSelected()
-                                    }
-                                }
-                                val onOpenClick = remember(
-                                    item.playlist,
-                                    playerViewModel, onItemSelected
-                                ) {
-                                    {
-                                        navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.playlist.id))
-                                        onItemSelected()
-                                    }
-                                }
-                                SearchResultPlaylistItem(
-                                    playlist = item.playlist,
-                                    playlistSongs = playlistSongs,
-                                    onPlayClick = onPlayClick,
-                                    onOpenClick = onOpenClick
-                                )
+                    is SearchResultItem.AlbumItem -> {
+                        val onPlayClick = remember(item.album, playerViewModel, onItemSelected) {
+                            {
+                                Timber.tag("SearchScreen")
+                                    .d("Album clicked: ${item.album.title}")
+                                playerViewModel.playAlbum(item.album)
+                                onItemSelected()
                             }
                         }
+                        val onOpenClick = remember(
+                            item.album,
+                            playerViewModel, onItemSelected
+                        ) {
+                            {
+                                navController.navigateSafelyReplacing(
+                                    route = Screen.AlbumDetail.createRoute(item.album.id),
+                                    patternToPop = Screen.AlbumDetail.route
+                                )
+                                onItemSelected()
+                            }
+                        }
+                        SearchResultAlbumItem(
+                            album = item.album,
+                            onPlayClick = onPlayClick,
+                            onOpenClick = onOpenClick
+                        )
+                    }
+
+                    is SearchResultItem.ArtistItem -> {
+                        val onPlayClick = remember(item.artist, playerViewModel, onItemSelected) {
+                            {
+                                Timber.tag("SearchScreen")
+                                    .d("Artist clicked: ${item.artist.name}")
+                                playerViewModel.playArtist(item.artist)
+                                onItemSelected()
+                            }
+                        }
+                        val onOpenClick = remember(
+                            item.artist,
+                            playerViewModel, onItemSelected
+                        ) {
+                            {
+                                navController.navigateSafelyReplacing(
+                                    route = Screen.ArtistDetail.createRoute(item.artist.id),
+                                    patternToPop = Screen.ArtistDetail.route
+                                )
+                                onItemSelected()
+                            }
+                        }
+                        SearchResultArtistItem(
+                            artist = item.artist,
+                            onPlayClick = onPlayClick,
+                            onOpenClick = onOpenClick
+                        )
+                    }
+
+                    is SearchResultItem.PlaylistItem -> {
+                        val playlistSongs by remember(item.playlist.songIds, playerViewModel) {
+                            playerViewModel.observeSongs(item.playlist.songIds)
+                                .map { it.toImmutableList() }
+                        }.collectAsStateWithLifecycle(initialValue = persistentListOf())
+                        val coroutineScope = rememberCoroutineScope()
+                        val onPlayClick: () -> Unit = {
+                            coroutineScope.launch {
+                                val songs = playerViewModel.getSongs(item.playlist.songIds)
+                                if (songs.isNotEmpty()) {
+                                    playerViewModel.playSongs(
+                                        songs,
+                                        songs.first(),
+                                        item.playlist.name
+                                    )
+                                    if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
+                                } else {
+                                    navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.playlist.id))
+                                }
+                                onItemSelected()
+                            }
+                        }
+                        val onOpenClick = remember(
+                            item.playlist,
+                            playerViewModel, onItemSelected
+                        ) {
+                            {
+                                navController.navigateSafely(Screen.PlaylistDetail.createRoute(item.playlist.id))
+                                onItemSelected()
+                            }
+                        }
+                        SearchResultPlaylistItem(
+                            playlist = item.playlist,
+                            playlistSongs = playlistSongs,
+                            onPlayClick = onPlayClick,
+                            onOpenClick = onOpenClick
+                        )
                     }
                 }
             }
@@ -1004,7 +959,9 @@ fun SearchResultAlbumItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = album.artist,
+                    text = if (album.songCount > 0) "${album.artist} • ${formatSongCount(album.songCount)}"
+                           else if (album.artist.isNotBlank()) "${album.artist} • Album"
+                           else "Album",
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1090,7 +1047,7 @@ fun SearchResultArtistItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = formatSongCount(artist.songCount),
+                    text = if (artist.songCount > 0) formatSongCount(artist.songCount) else "Artist",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1160,7 +1117,9 @@ fun SearchResultPlaylistItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = formatSongCount(playlist.songIds.size),
+                    text = if (playlist.songIds.isNotEmpty()) formatSongCount(playlist.songIds.size)
+                           else if (playlist.source == "YOUTUBE") "Playlist • YouTube Music"
+                           else "Playlist",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -13,7 +13,9 @@ import com.lostf1sh.pixelplayeross.data.repository.ArtistImageRepository
 import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,6 +57,7 @@ class ArtistDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
     private val artistImageRepository: ArtistImageRepository,
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
     val themeStateHolder: ThemeStateHolder,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -118,8 +121,31 @@ class ArtistDetailViewModel @Inject constructor(
                     }
                     .collect { (artist, songs) ->
                         if (artist == null) {
-                            _uiState.update {
-                                it.copy(error = context.getString(R.string.could_not_find_artist), isLoading = false)
+                            val onlineResult = withContext(Dispatchers.IO) {
+                                youTubeRepository.getArtistDetails(id)
+                            }
+                            if (onlineResult != null) {
+                                val (onlineArtist, onlineSongs) = onlineResult
+                                val albumSections = buildAlbumSections(onlineSongs)
+                                val orderedSongs = albumSections.flatMap { it.songs }
+                                val effectiveUrl = onlineArtist.imageUrl
+                                val newScheme = if (!effectiveUrl.isNullOrBlank()) {
+                                    try {
+                                        themeStateHolder.getOrGenerateColorScheme(effectiveUrl)
+                                    } catch (_: Exception) { null }
+                                } else null
+                                _artistColorScheme.value = newScheme
+                                _uiState.value = ArtistDetailUiState(
+                                    artist = onlineArtist,
+                                    songs = orderedSongs,
+                                    albumSections = albumSections,
+                                    effectiveImageUrl = effectiveUrl,
+                                    isLoading = false
+                                )
+                            } else {
+                                _uiState.update {
+                                    it.copy(error = context.getString(R.string.could_not_find_artist), isLoading = false)
+                                }
                             }
                             return@collect
                         }
