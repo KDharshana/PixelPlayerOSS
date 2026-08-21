@@ -187,9 +187,6 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(searchQuery, currentFilter) {
-        playerViewModel.performSearch(searchQuery)
-    }
     val searchResults = searchUiState.searchResults
     val handleSongMoreOptionsClick: (Song) -> Unit = { song ->
         playerViewModel.selectSongForInfo(song)
@@ -724,7 +721,11 @@ fun SearchResultsList(
 
     val imePadding = WindowInsets.ime.getBottom(localDensity).dp
     val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 94.dp
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState = androidx.compose.runtime.saveable.rememberSaveable(
+        saver = androidx.compose.foundation.lazy.LazyListState.Saver
+    ) {
+        androidx.compose.foundation.lazy.LazyListState()
+    }
 
     LaunchedEffect(listState) {
         snapshotFlow {
