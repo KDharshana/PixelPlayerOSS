@@ -292,17 +292,9 @@ class MusicService : MediaSessionService() {
         return (this as? com.lostf1sh.pixelplayeross.data.service.player.MappingPlayer)?.innerPlayer ?: this
     }
 
-    private fun Player.unwrapFadingPlayer(): Player {
-        return (this as? com.lostf1sh.pixelplayeross.data.service.player.FadingPlayer)?.innerPlayer ?: this
-    }
-
-    private fun wrapFadingPlayer(player: Player): Player {
-        val fadingPlayer = com.lostf1sh.pixelplayeross.data.service.player.FadingPlayer(
-            innerPlayer = player,
-            scope = appScope
-        )
+    private fun wrapSessionPlayer(player: Player): Player {
         return com.lostf1sh.pixelplayeross.data.service.player.MappingPlayer(
-            innerPlayer = fadingPlayer,
+            innerPlayer = player,
             context = this
         )
     }
@@ -310,10 +302,10 @@ class MusicService : MediaSessionService() {
     private fun publishMediaSessionPlayer(player: Player, logMessage: String) {
         val session = mediaSession ?: return
         val oldPlayer = session.player
-        val unwrappedOld = oldPlayer.unwrapMappingPlayer().unwrapFadingPlayer()
+        val unwrappedOld = oldPlayer.unwrapMappingPlayer()
         if (unwrappedOld !== player) {
             oldPlayer.removeListener(playerListener)
-            val wrappedPlayer = wrapFadingPlayer(player)
+            val wrappedPlayer = wrapSessionPlayer(player)
             session.player = wrappedPlayer
             wrappedPlayer.addListener(playerListener)
         }
@@ -697,7 +689,7 @@ class MusicService : MediaSessionService() {
             }
         }
 
-        mediaSession = MediaSession.Builder(this, wrapFadingPlayer(engine.masterPlayer))
+        mediaSession = MediaSession.Builder(this, wrapSessionPlayer(engine.masterPlayer))
             .setCallback(callback)
             .setSessionActivity(getOpenAppPendingIntent())
             .setBitmapLoader(CoilBitmapLoader(this, serviceScope))
