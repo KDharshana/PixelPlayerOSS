@@ -4,6 +4,7 @@ import com.lostf1sh.pixelplayeross.data.database.EngagementDao
 import com.lostf1sh.pixelplayeross.data.database.MusicDao
 import com.lostf1sh.pixelplayeross.data.database.SongEngagementEntity
 import com.lostf1sh.pixelplayeross.data.database.SongEntity
+import com.lostf1sh.pixelplayeross.data.database.toSong
 import com.lostf1sh.pixelplayeross.data.model.SmartPlaylistType
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 import io.mockk.coEvery
@@ -95,5 +96,36 @@ class SmartPlaylistGeneratorTest {
         assertEquals(2, result.size)
         assertEquals("New Song", result[0].title)
         assertEquals("Old Song", result[1].title)
+    }
+
+    @Test
+    fun `getSmartQueueForSong with online radio returns radio recommendations`() = runTest {
+        val seedSong = createSongEntity(1L, "Seed Track").toSong()
+        val radioSong1 = createSongEntity(2L, "Radio Track 1").toSong()
+        val radioSong2 = createSongEntity(3L, "Radio Track 2").toSong()
+
+        coEvery { youTubeRepository.getRadioTracksForSong(seedSong) } returns listOf(radioSong1, radioSong2)
+
+        val result = generator.getSmartQueueForSong(seedSong, limit = 10)
+
+        assertEquals(2, result.size)
+        assertEquals("Radio Track 1", result[0].title)
+        assertEquals("Radio Track 2", result[1].title)
+    }
+
+    @Test
+    fun `getSmartQueueForSong fallback returns same artist and genre songs`() = runTest {
+        val seedSong = createSongEntity(1L, "Seed Track").toSong()
+        val sameArtistSong = createSongEntity(2L, "Artist Song")
+        val sameGenreSong = createSongEntity(3L, "Genre Song").copy(artistName = "Other Artist", genre = "Rock")
+
+        coEvery { youTubeRepository.getRadioTracksForSong(seedSong) } returns emptyList()
+        coEvery { musicDao.getAllSongsList() } returns listOf(createSongEntity(1L, "Seed Track"), sameArtistSong, sameGenreSong)
+        coEvery { engagementDao.getTopPlayedSongs(any()) } returns emptyList()
+
+        val result = generator.getSmartQueueForSong(seedSong, limit = 10)
+
+        assertTrue(result.isNotEmpty())
+        assertTrue(result.any { it.title == "Artist Song" })
     }
 }

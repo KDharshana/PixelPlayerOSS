@@ -82,4 +82,51 @@ class SmartPlaylistGenerator @Inject constructor(
             }
         }
     }
+
+    /**
+     * Generates a smart, highly-relevant queue of upcoming tracks seeded by [seedSong].
+     * Tries online/radio suggestions first, and seamlessly blends or falls back to
+     * artist/genre/affinity matching from the local library.
+     */
+    suspend fun getSmartQueueForSong(seedSong: Song, limit: Int = 50): List<Song> = withContext(Dispatchers.IO) {
+        val radioTracks = runCatching { youTubeRepository.getRadioTracksForSong(seedSong) }
+            .getOrDefault(emptyList())
+            .filter { it.id != seedSong.id && it.contentUriString != seedSong.contentUriString }
+
+        if (radioTracks.isNotEmpty()) {
+            return@withContext radioTracks.take(limit)
+        }
+
+        // Local Smart Relevance Strategy
+        val allLocalSongs = musicDao.getAllSongsList()
+            .map { it.toSong() }
+            .filter { it.id != seedSong.id && it.contentUriString != seedSong.contentUriString }
+
+        if (allLocalSongs.isEmpty()) {
+            return@withContext emptyList()
+        }
+
+        val sameArtist = allLocalSongs.filter {
+            it.artist.isNotBlank() && it.artist.equals(seedSong.artist, ignoreCase = true)
+        }.shuffled()
+
+        val sameGenre = if (!seedSong.genre.isNullOrBlank()) {
+            allLocalSongs.filter {
+                it.genre?.equals(seedSong.genre, ignoreCase = true) == true && !sameArtist.contains(it)
+            }.shuffled()
+        } else {
+            emptyList()
+        }
+
+        val topEngagements = engagementDao.getTopPlayedSongs(limit).map { it.songId }.toSet()
+        val highAffinity = allLocalSongs.filter {
+            it.id in topEngagements && !sameArtist.contains(it) && !sameGenre.contains(it)
+        }.shuffled()
+
+        val remainder = allLocalSongs.filter {
+            !sameArtist.contains(it) && !sameGenre.contains(it) && !highAffinity.contains(it)
+        }.shuffled()
+
+        (sameArtist + sameGenre + highAffinity + remainder).take(limit)
+    }
 }

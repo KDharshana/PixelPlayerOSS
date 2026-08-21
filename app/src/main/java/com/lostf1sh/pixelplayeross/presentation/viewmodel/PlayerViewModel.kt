@@ -298,6 +298,34 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Plays a single seed song immediately with zero buffering delay,
+     * while seamlessly assembling and appending smart, highly-relevant
+     * upcoming tracks (similar artist, genre, radio) to the queue.
+     */
+    fun playSongWithSmartQueue(song: Song, queueName: String = "Smart Mix") {
+        viewModelScope.launch {
+            showAndPlaySong(song, listOf(song), queueName)
+            val smartTracks = smartPlaylistGenerator.getSmartQueueForSong(song, limit = 50)
+            if (smartTracks.isNotEmpty()) {
+                val controller = mediaController
+                if (controller != null && controller.isConnected) {
+                    val existingMediaIds = (0 until controller.mediaItemCount).map {
+                        controller.getMediaItemAt(it).mediaId
+                    }.toSet()
+                    val newTracks = smartTracks.filter { it.id !in existingMediaIds && it.contentUriString !in existingMediaIds }
+                    if (newTracks.isNotEmpty()) {
+                        val newMediaItems = newTracks.map { buildPlaybackMediaItem(it) }
+                        controller.addMediaItems(newMediaItems)
+                        val updatedQueue = (listOf(song) + newTracks).toImmutableList()
+                        queueStateHolder.setOriginalQueueOrder(updatedQueue)
+                        _playerUiState.update { it.copy(currentPlaybackQueue = updatedQueue) }
+                    }
+                }
+            }
+        }
+    }
+
     private val _playerUiState = MutableStateFlow(PlayerUiState())
     val playerUiState: StateFlow<PlayerUiState> = _playerUiState.asStateFlow()
 

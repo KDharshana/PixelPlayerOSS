@@ -179,6 +179,8 @@ class MusicService : MediaSessionService() {
     @Inject
     lateinit var youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
     @Inject
+    lateinit var smartPlaylistGenerator: com.lostf1sh.pixelplayeross.data.repository.SmartPlaylistGenerator
+    @Inject
     @AppScope
     lateinit var appScope: CoroutineScope
 
@@ -1260,17 +1262,23 @@ class MusicService : MediaSessionService() {
                         youtubeId = if (mediaId.startsWith("youtube_")) mediaId.removePrefix("youtube_") else null
                     )
 
-                    val radioSongs = youTubeRepository.getRadioTracksForSong(currentSong)
-                    if (radioSongs.isNotEmpty()) {
+                    val radioSongs = runCatching { youTubeRepository.getRadioTracksForSong(currentSong) }.getOrDefault(emptyList())
+                    val songsToAppend = if (radioSongs.isNotEmpty()) {
+                        radioSongs
+                    } else {
+                        smartPlaylistGenerator.getSmartQueueForSong(currentSong, limit = 20)
+                    }
+
+                    if (songsToAppend.isNotEmpty()) {
                         val existingIds = (0 until player.mediaItemCount).map {
                             player.getMediaItemAt(it).mediaId
                         }.toSet()
 
-                        val newTracks = radioSongs.filter { it.id !in existingIds && it.contentUriString !in existingIds }
+                        val newTracks = songsToAppend.filter { it.id !in existingIds && it.contentUriString !in existingIds }
                         if (newTracks.isNotEmpty()) {
                             val newMediaItems = newTracks.map { MediaItemBuilder.build(it) }
                             player.addMediaItems(newMediaItems)
-                            Timber.tag("MusicService").d("Infinite autoplay appended ${newMediaItems.size} radio tracks to queue")
+                            Timber.tag("MusicService").d("Infinite autoplay appended ${newMediaItems.size} smart/radio tracks to queue")
                         }
                     }
                 } catch (e: Exception) {
