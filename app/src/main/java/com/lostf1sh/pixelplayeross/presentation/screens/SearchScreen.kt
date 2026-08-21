@@ -86,6 +86,8 @@ import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.ime
@@ -750,18 +752,18 @@ fun SearchResultsList(
     val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 94.dp
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
 
-    val shouldLoadMore by remember {
-        derivedStateOf {
+    LaunchedEffect(listState) {
+        snapshotFlow {
             val totalItems = listState.layoutInfo.totalItemsCount
             val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            totalItems > 0 && lastVisibleItem >= totalItems - 4
+            totalItems > 0 && lastVisibleItem >= totalItems - 3
         }
-    }
-
-    LaunchedEffect(shouldLoadMore) {
-        if (shouldLoadMore) {
-            playerViewModel.loadMoreSearchResults()
-        }
+            .distinctUntilChanged()
+            .collect { shouldLoad ->
+                if (shouldLoad) {
+                    playerViewModel.loadMoreSearchResults()
+                }
+            }
     }
 
     LazyColumn(
