@@ -27,6 +27,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = mockk<Context>(relaxed = true),
             lrcLibApiService = mockk<LrcLibApiService>(relaxed = true),
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = mockk<LyricsDao>(relaxed = true),
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository()
@@ -62,6 +63,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = mockk<Context>(relaxed = true),
             lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = mockk<LyricsDao>(relaxed = true),
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository()
@@ -105,6 +107,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = mockk<Context>(relaxed = true),
             lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = lyricsDao,
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository()
@@ -145,6 +148,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = testContext(),
             lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = lyricsDao,
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository(externalLyricsEnabled = false)
@@ -181,6 +185,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = testContext(),
             lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = lyricsDao,
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository()
@@ -214,6 +219,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = testContext(),
             lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = lyricsDao,
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository()
@@ -247,6 +253,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = testContext(),
             lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = lyricsDao,
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository()
@@ -281,6 +288,7 @@ class LyricsRepositoryImplTest {
         val repository = LyricsRepositoryImpl(
             context = testContext(),
             lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
             lyricsDao = lyricsDao,
             okHttpClient = mockk<OkHttpClient>(relaxed = true),
             userPreferencesRepository = userPreferencesRepository()
@@ -297,6 +305,82 @@ class LyricsRepositoryImplTest {
 
         assertThat(result.isSuccess).isTrue()
         coVerify(exactly = 1) { lyricsDao.insert(any()) }
+    }
+
+    @Test
+    fun getLyrics_cleansYouTubeVideoTagsAndFetchesLyrics() = runTest {
+        val apiService = mockk<LrcLibApiService>(relaxed = true)
+        val lyricsDao = mockk<LyricsDao>(relaxed = true)
+        val lyrics = lrcResponse(
+            name = "Blinding Lights",
+            artistName = "The Weeknd",
+            duration = 200.0
+        )
+        coEvery { lyricsDao.getLyrics(any()) } returns null
+        coEvery { apiService.searchLyrics(trackName = "Blinding Lights", artistName = "The Weeknd") } returns arrayOf(lyrics)
+
+        val repository = LyricsRepositoryImpl(
+            context = testContext(),
+            lrcLibApiService = apiService,
+            innertubeApiService = mockk(relaxed = true),
+            lyricsDao = lyricsDao,
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            userPreferencesRepository = userPreferencesRepository()
+        )
+        val song = testSong(
+            id = "200",
+            title = "The Weeknd - Blinding Lights (Official Music Video)",
+            artist = "The Weeknd",
+            duration = 200_000L
+        )
+
+        val result = repository.getLyrics(song, LyricsSourcePreference.API_FIRST)
+
+        assertThat(result).isNotNull()
+        assertThat(result!!.areFromRemote).isTrue()
+    }
+
+    @Test
+    fun getLyrics_fallsBackToYouTubeTranscriptWhenLrcLibHasNoMatch() = runTest {
+        val apiService = mockk<LrcLibApiService>(relaxed = true)
+        val innertubeService = mockk<com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeApiService>(relaxed = true)
+        val lyricsDao = mockk<LyricsDao>(relaxed = true)
+        coEvery { lyricsDao.getLyrics(any()) } returns null
+        coEvery { apiService.searchLyrics(any(), any(), any(), any()) } returns emptyArray()
+        coEvery { innertubeService.getTranscriptLyrics("dQw4w9WgXcQ") } returns "[00:00.00]Never gonna give you up\n[00:03.00]Never gonna let you down"
+
+        val repository = LyricsRepositoryImpl(
+            context = testContext(),
+            lrcLibApiService = apiService,
+            innertubeApiService = innertubeService,
+            lyricsDao = lyricsDao,
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            userPreferencesRepository = userPreferencesRepository()
+        )
+        val song = Song(
+            id = "youtube_dQw4w9WgXcQ",
+            title = "Never Gonna Give You Up",
+            artist = "Rick Astley",
+            artistId = 1L,
+            album = "Whenever You Need Somebody",
+            albumId = 1L,
+            path = "",
+            contentUriString = "youtube://dQw4w9WgXcQ",
+            albumArtUriString = null,
+            duration = 213_000L,
+            lyrics = null,
+            mimeType = "audio/opus",
+            bitrate = 160_000,
+            sampleRate = 48_000,
+            youtubeId = "dQw4w9WgXcQ"
+        )
+
+        val result = repository.getLyrics(song, LyricsSourcePreference.API_FIRST)
+
+        assertThat(result).isNotNull()
+        assertThat(result!!.areFromRemote).isTrue()
+        assertThat(result.synced).isNotEmpty()
+        assertThat(result.synced!!.first().line).isEqualTo("Never gonna give you up")
     }
 
     private fun testContext(filesDir: File = Files.createTempDirectory("pixelplayer-lyrics-test").toFile()): Context {

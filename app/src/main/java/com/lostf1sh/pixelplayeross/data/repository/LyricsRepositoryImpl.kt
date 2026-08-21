@@ -116,6 +116,7 @@ private data class RemoteLyricsMatch(
 class LyricsRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lrcLibApiService: LrcLibApiService,
+    private val innertubeApiService: com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeApiService,
     private val lyricsDao: com.lostf1sh.pixelplayeross.data.database.LyricsDao,
     private val okHttpClient: OkHttpClient,
     private val userPreferencesRepository: UserPreferencesRepository
@@ -156,7 +157,6 @@ class LyricsRepositoryImpl @Inject constructor(
             "karaoke",
             "cover",
             "demo",
-            "version",
             "rework",
             "flip",
             "refix"
@@ -167,7 +167,30 @@ class LyricsRepositoryImpl @Inject constructor(
             "mono",
             "stereo",
             "official audio",
-            "official video"
+            "official video",
+            "official music video",
+            "official visualizer",
+            "visualizer",
+            "lyrics",
+            "lyric video",
+            "official lyric video",
+            "color coded lyrics",
+            "audio",
+            "mv",
+            "4k",
+            "hd",
+            "clip officiel",
+            "album version",
+            "single version",
+            "original version",
+            "deluxe",
+            "deluxe edition",
+            "anniversary edition",
+            "bonus track",
+            "remastered",
+            "remaster",
+            "soundtrack",
+            "ost"
         )
         private val UNKNOWN_ARTISTS = setOf(
             "",
@@ -187,6 +210,83 @@ class LyricsRepositoryImpl @Inject constructor(
             "vs",
             "the"
         )
+    }
+
+    object LyricsQueryCleaner {
+        private val MEDIA_TAG_PATTERNS = listOf(
+            Regex("""(?i)\s*[\(\[\{]\s*(?:official\s+)?(?:music\s+)?video\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:official\s+)?audio\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:official\s+)?visualizer\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:official\s+)?lyric(?:s)?\s*(?:video)?\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*color\s*coded\s*lyrics?\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*mv\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*4k(?:\s*60fps)?\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*hd\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*clip\s*officiel\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:slowed\s*[+&]\s*reverb|slowed|reverb)\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:sped\s*up|speed\s*up|nightcore)\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:acoustic|unplugged|live(?:\s+at\s+[^)\]\}]+)?)\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:remastered(?:\s*\d+)?|\d{4}\s*remaster|deluxe(?:\s*edition)?|anniversary(?:\s*edition)?|bonus\s*track)\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*(?:from\s+["'].*?["']|soundtrack|ost)\s*[\)\]\}]"""),
+            Regex("""(?i)\s*[\(\[\{]\s*prod\.?\s+by\s+[^)\]\}]+[\)\]\}]""")
+        )
+
+        private val FEATURE_PATTERN = Regex("""(?i)\s*[\(\[\{]\s*(?:feat|featuring|ft)\.?\s+[^)\]\}]+[\)\]\}]""")
+        private val INLINE_FEATURE_PATTERN = Regex("""(?i)\s+(?:feat|featuring|ft)\.?\s+.+$""")
+        private val TRACK_NUMBER_PREFIX = Regex("""^(\d{1,3}[\.\-\s_]+)""")
+        private val AUDIO_EXTENSIONS = Regex("""(?i)\.(mp3|flac|m4a|wav|ogg|opus|aac|wma)$""")
+        private val TITLE_ARTIST_SEPARATORS = Regex("""\s+[-–—:|~•]\s+""")
+
+        fun normalizeText(input: String): String {
+            var text = input
+                .replace('’', '\'')
+                .replace('‘', '\'')
+                .replace('“', '"')
+                .replace('”', '"')
+                .replace('«', '"')
+                .replace('»', '"')
+                .replace(Regex("""[【《「『]"""), "[")
+                .replace(Regex("""[】》」』]"""), "]")
+            text = Normalizer.normalize(text, Normalizer.Form.NFD).replace(Regex("""\p{M}"""), "")
+            return text.trim()
+        }
+
+        fun cleanTitle(rawTitle: String): String {
+            var title = rawTitle.trim()
+            title = title.replace(AUDIO_EXTENSIONS, "")
+            title = title.replace(TRACK_NUMBER_PREFIX, "")
+            MEDIA_TAG_PATTERNS.forEach { regex ->
+                title = title.replace(regex, "")
+            }
+            title = title.replace(FEATURE_PATTERN, "")
+            title = title.replace(INLINE_FEATURE_PATTERN, "")
+            return title.trim().trim('-', '–', '—', ':', '|', '~', '•').trim()
+        }
+
+        fun cleanArtist(rawArtist: String): String {
+            var artist = rawArtist.trim()
+            artist = artist.replace(Regex("""(?i)\s*\([^)]*\)"""), "")
+            artist = artist.replace(Regex("""(?i)\s*\[[^\]]*\]"""), "")
+            return artist.trim()
+        }
+
+        fun getPrimaryArtist(rawArtist: String): String {
+            val clean = cleanArtist(rawArtist)
+            val splitRegex = Regex("""(?i)\s*(?:feat\.?|ft\.?|featuring|&|,|/|x|X|with|vs\.?)\s+""")
+            return clean.split(splitRegex).firstOrNull()?.trim().orEmpty().ifBlank { clean }
+        }
+
+        fun extractTitleAndArtistFromSeparator(title: String): Pair<String, String>? {
+            val parts = title.split(TITLE_ARTIST_SEPARATORS, limit = 2)
+            if (parts.size == 2) {
+                val p1 = cleanArtist(parts[0])
+                val p2 = cleanTitle(parts[1])
+                if (p1.isNotBlank() && p2.isNotBlank()) {
+                    return Pair(p1, p2)
+                }
+            }
+            return null
+        }
     }
 
     private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -428,93 +528,125 @@ class LyricsRepositoryImpl @Inject constructor(
         updateLastApiCall("lrclib", System.currentTimeMillis())
 
         try {
-            val cleanArtist = song.displayArtist.trim().replace(Regex("\\(.*?\\)"), "").trim()
-            val cleanTitle = song.title.trim().replace(Regex("\\(.*?\\)"), "").trim()
-            val simplifiedArtist = cleanArtist.split(" feat.", " ft.", " featuring").first().trim()
-            val simplifiedTitle = cleanTitle.split(" feat.", " ft.", " featuring").first().trim()
-            val useSimplifiedStrategy =
-                simplifiedArtist != cleanArtist || simplifiedTitle != cleanTitle
+            val rawTitle = song.title
+            val rawArtist = song.displayArtist
+
+            val cleanTitle = LyricsQueryCleaner.cleanTitle(rawTitle)
+            val cleanArtist = LyricsQueryCleaner.cleanArtist(rawArtist)
+            val primaryArtist = LyricsQueryCleaner.getPrimaryArtist(rawArtist)
+            val normTitle = LyricsQueryCleaner.normalizeText(cleanTitle)
+            val normArtist = LyricsQueryCleaner.normalizeText(cleanArtist)
+            val extracted = LyricsQueryCleaner.extractTitleAndArtistFromSeparator(rawTitle)
 
             val searchStrategies = buildList {
-                add(
-                    RemoteSearchStrategy("track+artist") {
+                // 1. Clean track + artist
+                if (cleanTitle.isNotBlank() && cleanArtist.isNotBlank() && !isUnknownArtist(cleanArtist)) {
+                    add(RemoteSearchStrategy("clean_track+artist") {
                         lrcLibApiService.searchLyrics(trackName = cleanTitle, artistName = cleanArtist)
-                    }
-                )
-                add(
-                    RemoteSearchStrategy("combined_query") {
-                        lrcLibApiService.searchLyrics(query = "$cleanArtist $cleanTitle")
-                    }
-                )
-                if (useSimplifiedStrategy) {
-                    add(
-                        RemoteSearchStrategy("simplified_track+artist") {
-                            lrcLibApiService.searchLyrics(trackName = simplifiedTitle, artistName = simplifiedArtist)
-                        }
-                    )
+                    })
                 }
-                
-                val smartTitle = cleanTitleSmart(cleanTitle)
-                if (smartTitle != cleanTitle && smartTitle.isNotBlank()) {
-                    Timber.tag(TAG).d("Adding smart search strategy for: '$smartTitle' (orig: '$cleanTitle')")
-                    add(RemoteSearchStrategy("smart_track_only") {
-                        lrcLibApiService.searchLyrics(trackName = smartTitle)
+                // 2. Primary artist + clean track
+                if (primaryArtist.isNotBlank() && primaryArtist != cleanArtist && !isUnknownArtist(primaryArtist)) {
+                    add(RemoteSearchStrategy("primary_artist+track") {
+                        lrcLibApiService.searchLyrics(trackName = cleanTitle, artistName = primaryArtist)
+                    })
+                }
+                // 3. Combined query
+                if (cleanTitle.isNotBlank()) {
+                    val query = if (cleanArtist.isNotBlank() && !isUnknownArtist(cleanArtist)) {
+                        "$cleanArtist $cleanTitle"
+                    } else {
+                        cleanTitle
+                    }
+                    add(RemoteSearchStrategy("combined_query") {
+                        lrcLibApiService.searchLyrics(query = query)
+                    })
+                }
+                // 4. Normalized without diacritics
+                if ((normTitle != cleanTitle || normArtist != cleanArtist) && normTitle.isNotBlank()) {
+                    add(RemoteSearchStrategy("normalized_track+artist") {
+                        if (normArtist.isNotBlank() && !isUnknownArtist(normArtist)) {
+                            lrcLibApiService.searchLyrics(trackName = normTitle, artistName = normArtist)
+                        } else {
+                            lrcLibApiService.searchLyrics(trackName = normTitle)
+                        }
+                    })
+                }
+                // 5. Extracted from separator in title (e.g. "Artist - Title")
+                if (extracted != null) {
+                    add(RemoteSearchStrategy("extracted_separator") {
+                        lrcLibApiService.searchLyrics(trackName = extracted.second, artistName = extracted.first)
+                    })
+                    add(RemoteSearchStrategy("extracted_separator_reverse") {
+                        lrcLibApiService.searchLyrics(trackName = extracted.first, artistName = extracted.second)
+                    })
+                }
+                // 6. Track name only
+                if (cleanTitle.isNotBlank()) {
+                    add(RemoteSearchStrategy("track_only") {
+                        lrcLibApiService.searchLyrics(trackName = cleanTitle)
                     })
                 }
             }
 
             var results = runSearchStrategiesFast(searchStrategies)
 
-            if (results.isEmpty()) {
-                 val separators = charArrayOf('-', ',', '(', ')', '$', '#', ':', '%')
-                 val index = cleanTitle.indexOfAny(separators)
-                 if (index != -1) {
-                     val superCleanTitle = cleanTitle.substring(0, index).trim()
-                     if (superCleanTitle.isNotEmpty()) {
-                          Timber.tag(TAG).d("Strategy 4: Searching with super simplified title: '$superCleanTitle' (no artist)")
-                          val fallbackResults = runCatching {
-                                withNetworkRetry(operationName = "lrclib_super_clean_search") {
-                                    lrcLibApiService.searchLyrics(trackName = superCleanTitle)
-                                }
-                          }.getOrNull()
-                          if (!fallbackResults.isNullOrEmpty()) {
-                              results = fallbackResults.toList()
-                          }
-                     }
-                 }
+            if (results.isNotEmpty()) {
+                val bestMatch = rankRemoteLyricsMatches(
+                    song = song,
+                    responses = results,
+                    mode = RemoteLyricsMatchMode.AUTOMATIC
+                ).firstOrNull()?.response
+
+                if (bestMatch != null) {
+                    val rawLyrics = bestMatch.syncedLyrics ?: bestMatch.plainLyrics
+                    if (!rawLyrics.isNullOrBlank()) {
+                        val parsedLyrics = LyricsUtils.parseLyrics(rawLyrics).copy(areFromRemote = true)
+                        if (parsedLyrics.isValid()) {
+                            Timber.tag(TAG).d("LRCLIB lyrics found - Synced: ${!bestMatch.syncedLyrics.isNullOrBlank()}, Plain: ${!bestMatch.plainLyrics.isNullOrBlank()}")
+                            
+                            try {
+                                lyricsDao.insert(
+                                    com.lostf1sh.pixelplayeross.data.database.LyricsEntity(
+                                        songId = song.id.toLong(),
+                                        content = rawLyrics,
+                                        isSynced = !bestMatch.syncedLyrics.isNullOrBlank(),
+                                        source = "remote"
+                                    )
+                                )
+                            } catch (_: NumberFormatException) {
+                                Timber.tag(TAG).w("Skipping database save for non-numeric song ID: ${song.id}. Lyrics will be cached in JSON.")
+                            }
+                            
+                            return@withContext parsedLyrics
+                        }
+                    }
+                }
             }
 
-            if (results.isEmpty()) {
-                Timber.tag(TAG).d("No results from LRCLIB API")
-                return@withContext null
-            }
+            // Fallback: YouTube Transcript / Lyrics if song is from YouTube
+            val videoId = song.youtubeId
+                ?: song.id.removePrefix("youtube_").takeIf { song.id.startsWith("youtube_") && it.isNotBlank() }
+                ?: song.contentUriString.removePrefix("youtube://").substringBefore('?').takeIf { song.contentUriString.startsWith("youtube://") && it.isNotBlank() }
 
-            val bestMatch = rankRemoteLyricsMatches(
-                song = song,
-                responses = results,
-                mode = RemoteLyricsMatchMode.AUTOMATIC
-            ).firstOrNull()?.response
-
-            if (bestMatch != null) {
-                val rawLyrics = bestMatch.syncedLyrics ?: bestMatch.plainLyrics
-                if (!rawLyrics.isNullOrBlank()) {
-                    val parsedLyrics = LyricsUtils.parseLyrics(rawLyrics).copy(areFromRemote = true)
+            if (!videoId.isNullOrBlank()) {
+                Timber.tag(TAG).d("Attempting YouTube transcript fallback for videoId: $videoId")
+                val transcript = runCatching { innertubeApiService.getTranscriptLyrics(videoId) }.getOrNull()
+                if (!transcript.isNullOrBlank()) {
+                    val parsedLyrics = LyricsUtils.parseLyrics(transcript).copy(areFromRemote = true)
                     if (parsedLyrics.isValid()) {
-                        Timber.tag(TAG).d("LRCLIB lyrics found - Synced: ${!bestMatch.syncedLyrics.isNullOrBlank()}, Plain: ${!bestMatch.plainLyrics.isNullOrBlank()}")
-                        
+                        Timber.tag(TAG).d("YouTube transcript lyrics found for videoId: $videoId")
                         try {
                             lyricsDao.insert(
                                 com.lostf1sh.pixelplayeross.data.database.LyricsEntity(
                                     songId = song.id.toLong(),
-                                    content = rawLyrics,
-                                    isSynced = !bestMatch.syncedLyrics.isNullOrBlank(),
-                                    source = "remote"
+                                    content = transcript,
+                                    isSynced = true,
+                                    source = "youtube"
                                 )
                             )
-                        } catch (e: NumberFormatException) {
-                            Timber.tag(TAG).w("Skipping database save for non-numeric song ID: ${song.id}. Lyrics will be cached in JSON.")
+                        } catch (_: NumberFormatException) {
                         }
-                        
                         return@withContext parsedLyrics
                     }
                 }
@@ -539,7 +671,6 @@ class LyricsRepositoryImpl @Inject constructor(
         mode: RemoteLyricsMatchMode
     ): List<RemoteLyricsMatch> {
         val songDurationSeconds = song.duration / 1000.0
-        if (songDurationSeconds <= 0.0) return emptyList()
 
         return responses
             .mapNotNull { response ->
@@ -554,7 +685,7 @@ class LyricsRepositoryImpl @Inject constructor(
             .sortedWith(
                 compareByDescending<RemoteLyricsMatch> { it.score }
                     .thenByDescending { hasSyncedLyrics(it.response) }
-                    .thenBy { abs(it.response.duration - songDurationSeconds) }
+                    .thenBy { if (songDurationSeconds > 0.0) abs(it.response.duration - songDurationSeconds) else 0.0 }
             )
     }
 
@@ -564,19 +695,34 @@ class LyricsRepositoryImpl @Inject constructor(
         mode: RemoteLyricsMatchMode,
         songDurationSeconds: Double
     ): Int? {
-        if (!hasLyrics(response) || response.duration <= 0.0) return null
+        if (!hasLyrics(response)) return null
         if (!variantDescriptorsCompatible(song, response)) return null
 
         val hasSynced = hasSyncedLyrics(response)
-        val durationTolerance = remoteDurationToleranceSeconds(songDurationSeconds, hasSynced, mode)
-        val durationDiff = abs(response.duration - songDurationSeconds)
-        if (durationDiff > durationTolerance) return null
-
         val titleScore = titleMatchScore(song.title, response.name, mode) ?: return null
         val artistScore = artistMatchScore(song.displayArtist, response.artistName)
         if (!isUnknownArtist(song.displayArtist) && artistScore == null) return null
 
-        val durationScore = (durationTolerance - durationDiff).coerceAtLeast(0.0).toInt()
+        val durationTolerance = if (songDurationSeconds > 0.0) {
+            remoteDurationToleranceSeconds(songDurationSeconds, hasSynced, mode)
+        } else {
+            0.0
+        }
+        val durationDiff = if (songDurationSeconds > 0.0 && response.duration > 0.0) {
+            abs(response.duration - songDurationSeconds)
+        } else {
+            0.0
+        }
+
+        if (songDurationSeconds > 0.0 && response.duration > 0.0 && durationDiff > durationTolerance) {
+            return null
+        }
+
+        val durationScore = if (songDurationSeconds > 0.0) {
+            (durationTolerance - durationDiff).coerceAtLeast(0.0).toInt()
+        } else {
+            0
+        }
         val syncedScore = if (hasSynced) 10 else 0
         return titleScore + (artistScore ?: 0) + durationScore + syncedScore
     }
@@ -589,12 +735,12 @@ class LyricsRepositoryImpl @Inject constructor(
         return when (mode) {
             RemoteLyricsMatchMode.AUTOMATIC -> {
                 if (hasSyncedLyrics) {
-                    (songDurationSeconds * 0.02).coerceIn(5.0, 8.0)
+                    (songDurationSeconds * 0.05).coerceIn(10.0, 20.0)
                 } else {
-                    (songDurationSeconds * 0.04).coerceIn(8.0, 15.0)
+                    (songDurationSeconds * 0.08).coerceIn(15.0, 35.0)
                 }
             }
-            RemoteLyricsMatchMode.CANDIDATE -> 15.0
+            RemoteLyricsMatchMode.CANDIDATE -> 25.0
         }
     }
 

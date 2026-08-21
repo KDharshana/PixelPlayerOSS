@@ -258,6 +258,7 @@ object AppModule {
     fun provideLyricsRepository(
         @ApplicationContext context: Context,
         lrcLibApiService: LrcLibApiService,
+        innertubeApiService: com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeApiService,
         lyricsDao: LyricsDao,
         okHttpClient: OkHttpClient,
         userPreferencesRepository: UserPreferencesRepository
@@ -265,6 +266,7 @@ object AppModule {
         return LyricsRepositoryImpl(
             context = context,
             lrcLibApiService = lrcLibApiService,
+            innertubeApiService = innertubeApiService,
             lyricsDao = lyricsDao,
             okHttpClient = okHttpClient,
             userPreferencesRepository = userPreferencesRepository

@@ -42,7 +42,7 @@ data class SetupUiState(
     val libraryNavigationMode: String = "tab_row",
     val navBarStyle: String = "default",
     val navBarCornerRadius: Int = 28,
-    val externalLyricsEnabled: Boolean = false,
+    val externalLyricsEnabled: Boolean = true,
     val externalArtistImagesEnabled: Boolean = false,
     val alarmsPermissionGranted: Boolean = false,
     val appThemeMode: String = AppThemeMode.DARK,
