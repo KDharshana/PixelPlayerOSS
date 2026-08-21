@@ -88,14 +88,23 @@ class PlaylistViewModel @Inject constructor(
 ) : ViewModel() {
 
     fun downloadPlaylist(songs: List<Song>) {
+        if (songs.isEmpty()) {
+            runCatching { Toast.makeText(context, "Playlist is empty", Toast.LENGTH_SHORT).show() }
+            return
+        }
         val cloudSongs = songs.filter(com.lostf1sh.pixelplayeross.data.offline.CloudOfflineRepository::isCloudSong)
         if (cloudSongs.isEmpty()) {
-            runCatching { Toast.makeText(context, context.getString(R.string.no_valid_songs), Toast.LENGTH_SHORT).show() }
+            runCatching { Toast.makeText(context, "All songs in this playlist are already stored locally on your device", Toast.LENGTH_SHORT).show() }
             return
         }
         viewModelScope.launch {
             cloudOfflineRepository.enqueueAll(cloudSongs)
-            runCatching { Toast.makeText(context, "Downloading ${cloudSongs.size} tracks...", Toast.LENGTH_SHORT).show() }
+            val msg = if (cloudSongs.size == songs.size) {
+                "Downloading ${cloudSongs.size} tracks for offline playback..."
+            } else {
+                "Downloading ${cloudSongs.size} online tracks (${songs.size - cloudSongs.size} already local)..."
+            }
+            runCatching { Toast.makeText(context, msg, Toast.LENGTH_SHORT).show() }
         }
     }
 

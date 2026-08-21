@@ -322,15 +322,20 @@ fun PlaylistDetailScreen(
                             contentDescription = sortSongsLabel
                         )
                     }
-                    IconButton(
-                        onClick = {
-                            playlistViewModel.downloadPlaylist(songsInPlaylist)
+                    val hasCloudSongs = remember(songsInPlaylist) {
+                        songsInPlaylist.any { com.lostf1sh.pixelplayeross.data.offline.CloudOfflineRepository.isCloudSong(it) }
+                    }
+                    if (hasCloudSongs) {
+                        IconButton(
+                            onClick = {
+                                playlistViewModel.downloadPlaylist(songsInPlaylist)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CloudDownload,
+                                contentDescription = stringResource(R.string.cloud_album_download)
+                            )
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CloudDownload,
-                            contentDescription = stringResource(R.string.cloud_album_download)
-                        )
                     }
                     if (!isFolderPlaylist) {
                         FilledTonalIconButton(
