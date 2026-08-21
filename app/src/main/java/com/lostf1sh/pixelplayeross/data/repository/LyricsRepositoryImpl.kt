@@ -519,15 +519,44 @@ class LyricsRepositoryImpl @Inject constructor(
             return@withContext cachedJson
         }
 
-        val currentTime = System.currentTimeMillis()
-        val delayNeeded = calculateApiDelay("lrclib", currentTime)
-        if (delayNeeded > 0) {
-            Timber.tag(TAG).d("Rate limiting: waiting ${delayNeeded}ms before API call")
-            delay(delayNeeded)
-        }
-        updateLastApiCall("lrclib", System.currentTimeMillis())
-
         try {
+            // 1. Primary for YouTube / online tracks: YouTube Music transcript synced lyrics first
+            val videoId = song.youtubeId
+                ?: song.id.removePrefix("youtube_").takeIf { song.id.startsWith("youtube_") && it.isNotBlank() }
+                ?: song.contentUriString.removePrefix("youtube://").substringBefore('?').takeIf { song.contentUriString.startsWith("youtube://") && it.isNotBlank() }
+
+            if (!videoId.isNullOrBlank()) {
+                Timber.tag(TAG).d("Attempting YouTube Music transcript synced lyrics for videoId: $videoId")
+                val transcript = runCatching { innertubeApiService.getTranscriptLyrics(videoId) }.getOrNull()
+                if (!transcript.isNullOrBlank()) {
+                    val parsedLyrics = LyricsUtils.parseLyrics(transcript).copy(areFromRemote = true)
+                    if (parsedLyrics.isValid() && !parsedLyrics.synced.isNullOrEmpty()) {
+                        Timber.tag(TAG).d("YouTube Music synchronized transcript lyrics found for videoId: $videoId")
+                        try {
+                            lyricsDao.insert(
+                                com.lostf1sh.pixelplayeross.data.database.LyricsEntity(
+                                    songId = song.id.toLong(),
+                                    content = transcript,
+                                    isSynced = true,
+                                    source = "youtube"
+                                )
+                            )
+                        } catch (_: NumberFormatException) {
+                        }
+                        return@withContext parsedLyrics
+                    }
+                }
+            }
+
+            // 2. Fallback: When lyrics not available from YouTube Music, query LRCLIB (synced only)
+            val currentTime = System.currentTimeMillis()
+            val delayNeeded = calculateApiDelay("lrclib", currentTime)
+            if (delayNeeded > 0) {
+                Timber.tag(TAG).d("Rate limiting: waiting ${delayNeeded}ms before API call")
+                delay(delayNeeded)
+            }
+            updateLastApiCall("lrclib", System.currentTimeMillis())
+
             val rawTitle = song.title
             val rawArtist = song.displayArtist
 
@@ -589,7 +618,7 @@ class LyricsRepositoryImpl @Inject constructor(
                 }
             }
 
-            var results = runSearchStrategiesFast(searchStrategies)
+            val results = runSearchStrategiesFast(searchStrategies)
 
             if (results.isNotEmpty()) {
                 val bestMatch = rankRemoteLyricsMatches(
@@ -599,62 +628,32 @@ class LyricsRepositoryImpl @Inject constructor(
                 ).firstOrNull()?.response
 
                 if (bestMatch != null) {
-                    val rawLyrics = bestMatch.syncedLyrics ?: bestMatch.plainLyrics
-                    if (!rawLyrics.isNullOrBlank()) {
-                        val parsedLyrics = LyricsUtils.parseLyrics(rawLyrics).copy(areFromRemote = true)
-                        if (parsedLyrics.isValid()) {
-                            Timber.tag(TAG).d("LRCLIB lyrics found - Synced: ${!bestMatch.syncedLyrics.isNullOrBlank()}, Plain: ${!bestMatch.plainLyrics.isNullOrBlank()}")
-                            
+                    val rawSyncedLyrics = bestMatch.syncedLyrics
+                    if (!rawSyncedLyrics.isNullOrBlank()) {
+                        val parsedLyrics = LyricsUtils.parseLyrics(rawSyncedLyrics).copy(areFromRemote = true)
+                        if (parsedLyrics.isValid() && !parsedLyrics.synced.isNullOrEmpty()) {
+                            Timber.tag(TAG).d("LRCLIB synchronized lyrics found for: ${song.title}")
                             try {
                                 lyricsDao.insert(
                                     com.lostf1sh.pixelplayeross.data.database.LyricsEntity(
                                         songId = song.id.toLong(),
-                                        content = rawLyrics,
-                                        isSynced = !bestMatch.syncedLyrics.isNullOrBlank(),
+                                        content = rawSyncedLyrics,
+                                        isSynced = true,
                                         source = "remote"
                                     )
                                 )
                             } catch (_: NumberFormatException) {
                                 Timber.tag(TAG).w("Skipping database save for non-numeric song ID: ${song.id}. Lyrics will be cached in JSON.")
                             }
-                            
                             return@withContext parsedLyrics
                         }
                     }
                 }
             }
 
-            // Fallback: YouTube Transcript / Lyrics if song is from YouTube
-            val videoId = song.youtubeId
-                ?: song.id.removePrefix("youtube_").takeIf { song.id.startsWith("youtube_") && it.isNotBlank() }
-                ?: song.contentUriString.removePrefix("youtube://").substringBefore('?').takeIf { song.contentUriString.startsWith("youtube://") && it.isNotBlank() }
-
-            if (!videoId.isNullOrBlank()) {
-                Timber.tag(TAG).d("Attempting YouTube transcript fallback for videoId: $videoId")
-                val transcript = runCatching { innertubeApiService.getTranscriptLyrics(videoId) }.getOrNull()
-                if (!transcript.isNullOrBlank()) {
-                    val parsedLyrics = LyricsUtils.parseLyrics(transcript).copy(areFromRemote = true)
-                    if (parsedLyrics.isValid()) {
-                        Timber.tag(TAG).d("YouTube transcript lyrics found for videoId: $videoId")
-                        try {
-                            lyricsDao.insert(
-                                com.lostf1sh.pixelplayeross.data.database.LyricsEntity(
-                                    songId = song.id.toLong(),
-                                    content = transcript,
-                                    isSynced = true,
-                                    source = "youtube"
-                                )
-                            )
-                        } catch (_: NumberFormatException) {
-                        }
-                        return@withContext parsedLyrics
-                    }
-                }
-            }
-
             return@withContext null
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "LRCLIB lyrics fetch failed: ${e.message}")
+            Timber.tag(TAG).e(e, "Lyrics fetch failed: ${e.message}")
             return@withContext null
         }
     }
@@ -697,8 +696,9 @@ class LyricsRepositoryImpl @Inject constructor(
     ): Int? {
         if (!hasLyrics(response)) return null
         if (!variantDescriptorsCompatible(song, response)) return null
-
         val hasSynced = hasSyncedLyrics(response)
+        if (mode == RemoteLyricsMatchMode.AUTOMATIC && !hasSynced) return null
+
         val titleScore = titleMatchScore(song.title, response.name, mode) ?: return null
         val artistScore = artistMatchScore(song.displayArtist, response.artistName)
         if (!isUnknownArtist(song.displayArtist) && artistScore == null) return null
