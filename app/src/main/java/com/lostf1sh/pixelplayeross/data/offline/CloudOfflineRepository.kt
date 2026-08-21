@@ -62,7 +62,10 @@ class CloudOfflineRepository @Inject constructor(
 ) {
     private val mutationMutex = Mutex()
 
-    fun observe(song: Song): Flow<OfflineDownload?> = observe(song.contentUriString)
+    fun observe(song: Song): Flow<OfflineDownload?> {
+        val sourceUri = canonicalSourceUri(song) ?: return kotlinx.coroutines.flow.flowOf(null)
+        return observe(sourceUri)
+    }
 
     fun observe(sourceUri: String): Flow<OfflineDownload?> =
         dao.observeBySourceUri(sourceUri).map { it?.toModel() }
@@ -75,14 +78,7 @@ class CloudOfflineRepository @Inject constructor(
 
     suspend fun enqueue(song: Song) = withContext(Dispatchers.IO) {
         mutationMutex.withLock {
-            val sourceUri = if (song.contentUriString.startsWith("youtube://") || song.contentUriString.startsWith("navidrome://") || song.contentUriString.startsWith("jellyfin://")) {
-                song.contentUriString
-            } else if (!song.youtubeId.isNullOrBlank()) {
-                "youtube://${song.youtubeId}"
-            } else {
-                return@withLock
-            }
-
+            val sourceUri = canonicalSourceUri(song) ?: return@withLock
             val provider = providerFor(sourceUri) ?: return@withLock
             val downloadId = downloadId(sourceUri)
             val existing = dao.getBySourceUri(sourceUri)
@@ -131,7 +127,7 @@ class CloudOfflineRepository @Inject constructor(
     suspend fun enqueueAll(songs: Collection<Song>) {
         songs.asSequence()
             .filter { isCloudSong(it) }
-            .distinctBy { it.contentUriString }
+            .distinctBy { canonicalSourceUri(it) }
             .forEach { enqueue(it) }
     }
 
@@ -168,7 +164,10 @@ class CloudOfflineRepository @Inject constructor(
         }
     }
 
-    suspend fun remove(song: Song) = remove(song.contentUriString)
+    suspend fun remove(song: Song) {
+        val sourceUri = canonicalSourceUri(song) ?: return
+        remove(sourceUri)
+    }
 
     suspend fun remove(sourceUri: String) = withContext(Dispatchers.IO) {
         mutationMutex.withLock {
@@ -210,7 +209,26 @@ class CloudOfflineRepository @Inject constructor(
     }
 
     companion object {
-        fun isCloudSong(song: Song): Boolean = providerFor(song.contentUriString) != null || !song.youtubeId.isNullOrBlank()
+        fun canonicalSourceUri(song: Song): String? {
+            if (song.contentUriString.startsWith("youtube://") || song.contentUriString.startsWith("navidrome://") || song.contentUriString.startsWith("jellyfin://")) {
+                return song.contentUriString
+            }
+            if (!song.youtubeId.isNullOrBlank()) {
+                return "youtube://${song.youtubeId}"
+            }
+            if (song.id.startsWith("youtube_")) {
+                return "youtube://${song.id.removePrefix("youtube_")}"
+            }
+            if (song.id.startsWith("navidrome_")) {
+                return "navidrome://${song.id.removePrefix("navidrome_")}"
+            }
+            if (song.id.startsWith("jellyfin_")) {
+                return "jellyfin://${song.id.removePrefix("jellyfin_")}"
+            }
+            return null
+        }
+
+        fun isCloudSong(song: Song): Boolean = canonicalSourceUri(song) != null
 
         fun providerFor(sourceUri: String): String? = when (sourceUri.substringBefore(':', "").lowercase()) {
             "navidrome" -> "navidrome"

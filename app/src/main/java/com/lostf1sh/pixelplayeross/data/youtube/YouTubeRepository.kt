@@ -25,6 +25,7 @@ import javax.inject.Singleton
 @Singleton
 class YouTubeRepository @Inject constructor(
     private val innertubeApiService: InnertubeApiService,
+    private val youTubeExtractorManager: com.lostf1sh.pixelplayeross.data.network.youtube.YouTubeExtractorManager,
     private val youTubeDao: YouTubeDao
 ) {
     private companion object {
@@ -95,6 +96,10 @@ class YouTubeRepository @Inject constructor(
      * Resolves the direct audio stream URL for a given YouTube video ID.
      */
     suspend fun getStreamUrl(videoId: String): String? = withContext(Dispatchers.IO) {
+        val extractedUrl = runCatching { youTubeExtractorManager.extractAudioStreamUrl(videoId) }.getOrNull()
+        if (!extractedUrl.isNullOrBlank()) {
+            return@withContext extractedUrl
+        }
         val streamInfo = innertubeApiService.getStreamInfo(videoId)
         streamInfo?.selectedFormatUrl ?: streamInfo?.highestBitrateOpusUrl ?: streamInfo?.highestBitrateAacUrl
     }

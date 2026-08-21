@@ -238,8 +238,14 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
                 }
                 val streamUrl = youTubeRepository.getStreamUrl(id)
                     ?: throw IOException("Failed to resolve YouTube stream URL")
+                val headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                    "Origin" to "https://music.youtube.com",
+                    "Referer" to "https://music.youtube.com/"
+                )
                 DownloadSource(
                     url = streamUrl,
+                    headers = headers,
                     allowedHost = "https://googlevideo.com"
                 )
             }

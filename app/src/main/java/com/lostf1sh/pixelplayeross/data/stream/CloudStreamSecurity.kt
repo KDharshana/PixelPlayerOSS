@@ -101,7 +101,7 @@ object CloudStreamSecurity {
             return true
         }
         val normalized = contentTypeHeader.substringBefore(';').trim().lowercase()
-        if (normalized.startsWith("audio/")) {
+        if (normalized.startsWith("audio/") || normalized.startsWith("video/")) {
             return true
         }
         return normalized in EXTRA_ALLOWED_AUDIO_TYPES

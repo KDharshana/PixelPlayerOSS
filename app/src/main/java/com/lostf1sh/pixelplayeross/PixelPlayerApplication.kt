@@ -170,6 +170,8 @@ class PixelPlayerApplication : Application(), ImageLoaderFactory, Configuration.
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
+            .setExecutor(java.util.concurrent.Executors.newFixedThreadPool(8))
+            .setTaskExecutor(java.util.concurrent.Executors.newFixedThreadPool(4))
             .build()
 
 }
