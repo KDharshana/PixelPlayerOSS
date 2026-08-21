@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.MusicOff
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
@@ -319,6 +320,16 @@ fun PlaylistDetailScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.Sort,
                             contentDescription = sortSongsLabel
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            playlistViewModel.downloadPlaylist(songsInPlaylist)
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.CloudDownload,
+                            contentDescription = stringResource(R.string.cloud_album_download)
                         )
                     }
                     if (!isFolderPlaylist) {

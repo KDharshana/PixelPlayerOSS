@@ -83,8 +83,21 @@ class PlaylistViewModel @Inject constructor(
     private val dailyMixManager: DailyMixManager,
     private val m3uManager: M3uManager,
     private val nlpPlaylistGenerator: NlpPlaylistGenerator,
+    private val cloudOfflineRepository: com.lostf1sh.pixelplayeross.data.offline.CloudOfflineRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    fun downloadPlaylist(songs: List<Song>) {
+        val cloudSongs = songs.filter(com.lostf1sh.pixelplayeross.data.offline.CloudOfflineRepository::isCloudSong)
+        if (cloudSongs.isEmpty()) {
+            runCatching { Toast.makeText(context, context.getString(R.string.no_valid_songs), Toast.LENGTH_SHORT).show() }
+            return
+        }
+        viewModelScope.launch {
+            cloudOfflineRepository.enqueueAll(cloudSongs)
+            runCatching { Toast.makeText(context, "Downloading ${cloudSongs.size} tracks...", Toast.LENGTH_SHORT).show() }
+        }
+    }
 
     private val _uiState = MutableStateFlow(PlaylistUiState())
     val uiState: StateFlow<PlaylistUiState> = _uiState.asStateFlow()

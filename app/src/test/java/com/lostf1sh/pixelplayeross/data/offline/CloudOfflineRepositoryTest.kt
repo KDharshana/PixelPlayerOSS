@@ -9,6 +9,7 @@ class CloudOfflineRepositoryTest {
     fun `provider detection accepts only supported cloud schemes`() {
         assertThat(CloudOfflineRepository.providerFor("navidrome://track_1")).isEqualTo("navidrome")
         assertThat(CloudOfflineRepository.providerFor("jellyfin://ABC123")).isEqualTo("jellyfin")
+        assertThat(CloudOfflineRepository.providerFor("youtube://dQw4w9WgXcQ")).isEqualTo("youtube")
         assertThat(CloudOfflineRepository.providerFor("https://example.com/song.mp3")).isNull()
         assertThat(CloudOfflineRepository.providerFor("file:///music/song.mp3")).isNull()
     }
@@ -29,6 +30,8 @@ class CloudOfflineRepositoryTest {
     fun `cloud song detection uses canonical playback uri`() {
         assertThat(CloudOfflineRepository.isCloudSong(song("navidrome://abc"))).isTrue()
         assertThat(CloudOfflineRepository.isCloudSong(song("jellyfin://ABC123"))).isTrue()
+        assertThat(CloudOfflineRepository.isCloudSong(song("youtube://dQw4w9WgXcQ"))).isTrue()
+        assertThat(CloudOfflineRepository.isCloudSong(Song.emptySong().copy(youtubeId = "dQw4w9WgXcQ"))).isTrue()
         assertThat(CloudOfflineRepository.isCloudSong(song("content://media/audio/1"))).isFalse()
     }
 

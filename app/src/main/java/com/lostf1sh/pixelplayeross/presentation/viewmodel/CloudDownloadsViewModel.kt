@@ -72,4 +72,8 @@ class CloudDownloadsViewModel @Inject constructor(
         if (cloudSongs.isEmpty()) return
         viewModelScope.launch { repository.enqueueAll(cloudSongs) }
     }
+
+    fun deleteAll() {
+        viewModelScope.launch { repository.deleteAllDownloaded() }
+    }
 }

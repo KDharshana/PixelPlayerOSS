@@ -75,9 +75,17 @@ class CloudOfflineRepository @Inject constructor(
 
     suspend fun enqueue(song: Song) = withContext(Dispatchers.IO) {
         mutationMutex.withLock {
-            val provider = providerFor(song.contentUriString) ?: return@withLock
-            val downloadId = downloadId(song.contentUriString)
-            val existing = dao.getBySourceUri(song.contentUriString)
+            val sourceUri = if (song.contentUriString.startsWith("youtube://") || song.contentUriString.startsWith("navidrome://") || song.contentUriString.startsWith("jellyfin://")) {
+                song.contentUriString
+            } else if (!song.youtubeId.isNullOrBlank()) {
+                "youtube://${song.youtubeId}"
+            } else {
+                return@withLock
+            }
+
+            val provider = providerFor(sourceUri) ?: return@withLock
+            val downloadId = downloadId(sourceUri)
+            val existing = dao.getBySourceUri(sourceUri)
             if (existing?.state == OfflineDownloadStatus.COMPLETE.storageValue &&
                 existing.localPath?.let(::File)?.isFile == true
             ) {
@@ -92,7 +100,7 @@ class CloudOfflineRepository @Inject constructor(
             val request = downloadRequest(
                 downloadId = downloadId,
                 attemptId = attemptId,
-                sourceUri = song.contentUriString
+                sourceUri = sourceUri
             )
 
             val now = System.currentTimeMillis()
@@ -101,7 +109,7 @@ class CloudOfflineRepository @Inject constructor(
                     downloadId = downloadId,
                     attemptId = attemptId,
                     songId = song.id,
-                    sourceUri = song.contentUriString,
+                    sourceUri = sourceUri,
                     provider = provider,
                     title = song.title,
                     mimeType = song.mimeType,
@@ -179,6 +187,15 @@ class CloudOfflineRepository @Inject constructor(
         }
     }
 
+    suspend fun deleteAllDownloaded() = withContext(Dispatchers.IO) {
+        val completed = dao.getCompleted()
+        completed.forEach { entity ->
+            entity.localPath?.let(::File)?.delete()
+            dao.deleteBySourceUri(entity.sourceUri)
+        }
+        downloadDirectory(context).listFiles()?.forEach(File::delete)
+    }
+
     /** Called on ExoPlayer's loading thread; Room I/O is dispatched by the caller. */
     suspend fun resolveLocalUri(sourceUri: String): Uri? = withContext(Dispatchers.IO) {
         val entity = dao.getBySourceUri(sourceUri) ?: return@withContext null
@@ -193,11 +210,12 @@ class CloudOfflineRepository @Inject constructor(
     }
 
     companion object {
-        fun isCloudSong(song: Song): Boolean = providerFor(song.contentUriString) != null
+        fun isCloudSong(song: Song): Boolean = providerFor(song.contentUriString) != null || !song.youtubeId.isNullOrBlank()
 
         fun providerFor(sourceUri: String): String? = when (sourceUri.substringBefore(':', "").lowercase()) {
             "navidrome" -> "navidrome"
             "jellyfin" -> "jellyfin"
+            "youtube" -> "youtube"
             else -> null
         }
 
