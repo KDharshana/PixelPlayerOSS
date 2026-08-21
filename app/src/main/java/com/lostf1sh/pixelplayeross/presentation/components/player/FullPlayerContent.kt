@@ -967,34 +967,28 @@ private fun FullPlayerAlbumCoverSection(
                 }
             }
         ) {
-            DoubleTapSeekOverlay(
-                onSeekRelative = onSeekRelative,
+            AlbumCarouselSection(
+                currentSong = song,
+                queue = currentPlaybackQueue,
+                expansionFraction = 1f,
+                currentMediaItemIndex = currentMediaItemIndex,
+                requestedScrollIndex = requestedScrollIndex,
+                onSongSelected = { newSong, index ->
+                    if (newSong.id != song.id || index != currentMediaItemIndex) {
+                        onSongSelected(newSong, index)
+                    }
+                },
+                onAlbumClick = onAlbumClick,
+                carouselStyle = carouselStyle,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(carouselHeight)
-            ) {
-                AlbumCarouselSection(
-                    currentSong = song,
-                    queue = currentPlaybackQueue,
-                    expansionFraction = 1f,
-                    currentMediaItemIndex = currentMediaItemIndex,
-                    requestedScrollIndex = requestedScrollIndex,
-                    onSongSelected = { newSong, index ->
-                        if (newSong.id != song.id || index != currentMediaItemIndex) {
-                            onSongSelected(newSong, index)
-                        }
+                    .graphicsLayer {
+                        scaleX = albumArtScale
+                        scaleY = albumArtScale
                     },
-                    onAlbumClick = onAlbumClick,
-                    carouselStyle = carouselStyle,
-                    modifier = Modifier
-                        .height(carouselHeight)
-                        .graphicsLayer {
-                            scaleX = albumArtScale
-                            scaleY = albumArtScale
-                        },
-                    albumArtQuality = albumArtQuality
-                )
-            }
+                albumArtQuality = albumArtQuality
+            )
         }
     }
 }
