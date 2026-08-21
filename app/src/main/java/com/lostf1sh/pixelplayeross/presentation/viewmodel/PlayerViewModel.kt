@@ -1273,6 +1273,51 @@ class PlayerViewModel @Inject constructor(
     val dailyMixSongs: StateFlow<ImmutableList<Song>> = dailyMixStateHolder.dailyMixSongs
     val yourMixSongs: StateFlow<ImmutableList<Song>> = dailyMixStateHolder.yourMixSongs
 
+    private val _fromCommunitySongs = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
+    val fromCommunitySongs = _fromCommunitySongs.asStateFlow()
+
+    private val _trendingCommunityPlaylists = MutableStateFlow<ImmutableList<com.lostf1sh.pixelplayeross.data.model.Playlist>>(persistentListOf())
+    val trendingCommunityPlaylists = _trendingCommunityPlaylists.asStateFlow()
+
+    private val _featuredPlaylists = MutableStateFlow<ImmutableList<com.lostf1sh.pixelplayeross.data.model.Playlist>>(persistentListOf())
+    val featuredPlaylists = _featuredPlaylists.asStateFlow()
+
+    private val _mixedForYouPlaylists = MutableStateFlow<ImmutableList<com.lostf1sh.pixelplayeross.data.model.Playlist>>(persistentListOf())
+    val mixedForYouPlaylists = _mixedForYouPlaylists.asStateFlow()
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val keepListeningSongs: StateFlow<ImmutableList<Song>> = playbackHistory
+        .flatMapLatest { history ->
+            val songIds = history.map { it.songId }.distinct().take(15)
+            if (songIds.isEmpty()) flowOf(emptyList())
+            else musicRepository.getSongsByIds(songIds)
+        }
+        .map { it.toImmutableList() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
+
+    fun loadHomeRecommendations(forceRefresh: Boolean = false) {
+        if (!forceRefresh && _fromCommunitySongs.value.isNotEmpty()) return
+        viewModelScope.launch {
+            try {
+                val recs = youTubeRepository.getHomeRecommendations()
+                if (recs.fromCommunity.isNotEmpty()) {
+                    _fromCommunitySongs.value = recs.fromCommunity.toImmutableList()
+                }
+                if (recs.trendingCommunityPlaylists.isNotEmpty()) {
+                    _trendingCommunityPlaylists.value = recs.trendingCommunityPlaylists.toImmutableList()
+                }
+                if (recs.featuredPlaylists.isNotEmpty()) {
+                    _featuredPlaylists.value = recs.featuredPlaylists.toImmutableList()
+                }
+                if (recs.mixedForYou.isNotEmpty()) {
+                    _mixedForYouPlaylists.value = recs.mixedForYou.toImmutableList()
+                }
+            } catch (e: Exception) {
+                Timber.tag("PlayerViewModel").e(e, "Error loading home recommendations")
+            }
+        }
+    }
+
     fun removeFromDailyMix(songId: String) {
         dailyMixStateHolder.removeFromDailyMix(songId)
     }
@@ -1290,8 +1335,6 @@ class PlayerViewModel @Inject constructor(
             song?.copy(isFavorite = favorites.contains(songId))
         }.distinctUntilChanged()
     }
-
-
 
     private fun updateDailyMix() {
         dailyMixStateHolder.updateDailyMix(
@@ -1691,18 +1734,21 @@ class PlayerViewModel @Inject constructor(
                 searchStateHolder.selectedSearchFilter,
                 searchStateHolder.searchHistory,
                 searchStateHolder.isLoadingMore,
-            ) { results, filter, history, loadingMore ->
+                searchStateHolder.isSearchingOnline,
+            ) { results, filter, history, loadingMore, searchingOnline ->
                 _playerUiState.update {
                     it.copy(
                         searchResults = results,
                         selectedSearchFilter = filter,
                         searchHistory = history,
                         isLoadingMoreSearchResults = loadingMore,
+                        isSearchingOnline = searchingOnline
                     )
                 }
             }.launchIn(viewModelScope)
 
             libraryStateHolder.initialize(viewModelScope)
+            loadHomeRecommendations()
 
             viewModelScope.launch {
                 combine(

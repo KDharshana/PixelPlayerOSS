@@ -52,6 +52,7 @@ data class PlayerUiState(
     val searchQuery: String = "",
     val isSyncingLibrary: Boolean = false,
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
+    val isSearchingOnline: Boolean = false,
     val currentStorageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter = com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL,
     val hideLocalMedia: Boolean = false,
     val showQueueItemUndoBar: Boolean = false,

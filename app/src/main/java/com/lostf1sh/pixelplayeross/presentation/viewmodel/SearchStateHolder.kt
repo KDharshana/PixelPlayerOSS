@@ -46,7 +46,7 @@ class SearchStateHolder @Inject constructor(
     private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 ) {
     private companion object {
-        const val SEARCH_DEBOUNCE_MS = 300L
+        const val SEARCH_DEBOUNCE_MS = 150L
     }
 
     private data class SearchRequest(
@@ -59,6 +59,9 @@ class SearchStateHolder @Inject constructor(
 
     private val _selectedSearchFilter = MutableStateFlow(SearchFilterType.ALL)
     val selectedSearchFilter = _selectedSearchFilter.asStateFlow()
+
+    private val _isSearchingOnline = MutableStateFlow(false)
+    val isSearchingOnline = _isSearchingOnline.asStateFlow()
 
     private val _isLoadingMore = MutableStateFlow(false)
     val isLoadingMore = _isLoadingMore.asStateFlow()
@@ -97,28 +100,47 @@ class SearchStateHolder @Inject constructor(
                     currentContinuationToken = null
 
                     if (normalizedQuery.isBlank()) {
-                        if (_searchResults.value.isNotEmpty()) {
-                            _searchResults.value = persistentListOf()
-                        }
+                        _searchResults.value = persistentListOf()
+                        _isSearchingOnline.value = false
                         return@collectLatest
                     }
 
-                    try {
-                        val currentFilter = _selectedSearchFilter.value
-                        val localFlow: Flow<List<SearchResultItem>> = musicRepository.searchAll(normalizedQuery, currentFilter)
-                        val ytFlow: Flow<List<SearchResultItem>> = if (currentFilter == SearchFilterType.ALL || currentFilter == SearchFilterType.SONGS) {
-                            flow {
-                                val pageResult = youTubeRepository.searchSongsPaginated(normalizedQuery)
-                                currentContinuationToken = pageResult.continuationToken
-                                emit(pageResult.songs.map { SearchResultItem.SongItem(it) })
-                            }
-                        } else {
-                            flowOf(emptyList())
-                        }
+                    val currentFilter = _selectedSearchFilter.value
+                    var currentLocalResults: List<SearchResultItem> = emptyList()
 
-                        combine(localFlow, ytFlow) { localResults: List<SearchResultItem>, ytResults: List<SearchResultItem> ->
-                            android.util.Log.d("YouTubeMusic", "Search results for '$normalizedQuery': local=${localResults.size}, yt=${ytResults.size}")
-                            (localResults + ytResults).sortedWith(
+                    // 1. Stage 1: Immediate Local Search (FTS4 SQLite)
+                    val localJob = launch {
+                        try {
+                            musicRepository.searchAll(normalizedQuery, currentFilter).collect { localList ->
+                                if (request.requestId != latestSearchRequestId.get()) return@collect
+                                currentLocalResults = localList
+                                if (_searchResults.value.isEmpty() || _searchResults.value.all { it in localList }) {
+                                    _searchResults.value = localList.toImmutableList()
+                                }
+                            }
+                        } catch (_: CancellationException) {
+                        } catch (e: Exception) {
+                            Timber.tag("SearchStateHolder").e(e, "Local search error for: $normalizedQuery")
+                        }
+                    }
+
+                    // 2. Stage 2: Background Progressive Online Search (YouTube Music)
+                    launch {
+                        _isSearchingOnline.value = true
+                        try {
+                            val ytResult = youTubeRepository.searchAllPaginated(normalizedQuery, currentFilter)
+                            if (request.requestId != latestSearchRequestId.get()) return@launch
+
+                            currentContinuationToken = ytResult.continuationToken
+
+                            val combined = (currentLocalResults + ytResult.items).distinctBy { item ->
+                                when (item) {
+                                    is SearchResultItem.SongItem -> "song_${item.song.title.lowercase()}_${item.song.artist.lowercase()}"
+                                    is SearchResultItem.AlbumItem -> "album_${item.album.title.lowercase()}_${item.album.artist.lowercase()}"
+                                    is SearchResultItem.ArtistItem -> "artist_${item.artist.name.lowercase()}"
+                                    is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.name.lowercase()}"
+                                }
+                            }.sortedWith(
                                 compareBy { result ->
                                     when (result) {
                                         is SearchResultItem.SongItem -> 0
@@ -128,21 +150,15 @@ class SearchStateHolder @Inject constructor(
                                     }
                                 }
                             )
-                        }.collect { sortedResults ->
-                            if (request.requestId != latestSearchRequestId.get()) {
-                                return@collect
-                            }
 
-                            val immutableResults = sortedResults.toImmutableList()
-                            if (_searchResults.value != immutableResults) {
-                                _searchResults.value = immutableResults
+                            _searchResults.value = combined.toImmutableList()
+                        } catch (_: CancellationException) {
+                        } catch (e: Exception) {
+                            Timber.tag("SearchStateHolder").e(e, "Online search error for: $normalizedQuery")
+                        } finally {
+                            if (request.requestId == latestSearchRequestId.get()) {
+                                _isSearchingOnline.value = false
                             }
-                        }
-                    } catch (_: CancellationException) {
-                    } catch (e: Exception) {
-                        if (request.requestId == latestSearchRequestId.get()) {
-                            Timber.e(e, "Error performing search for query: $normalizedQuery")
-                            _searchResults.value = persistentListOf()
                         }
                     }
                 }
@@ -156,14 +172,34 @@ class SearchStateHolder @Inject constructor(
         scope?.launch {
             _isLoadingMore.value = true
             try {
-                val pageResult = youTubeRepository.searchSongsPaginated(lastQuery, continuation)
+                val pageResult = youTubeRepository.searchAllPaginated(
+                    query = lastQuery,
+                    filterType = _selectedSearchFilter.value,
+                    continuation = continuation
+                )
                 currentContinuationToken = pageResult.continuationToken
-                if (pageResult.songs.isNotEmpty()) {
-                    val existingSongIds = _searchResults.value.mapNotNull { (it as? SearchResultItem.SongItem)?.song?.id }.toSet()
-                    val uniqueNewSongs = pageResult.songs.filter { it.id !in existingSongIds }
-                    if (uniqueNewSongs.isNotEmpty()) {
-                        val newItems = uniqueNewSongs.map { SearchResultItem.SongItem(it) }
-                        _searchResults.value = (_searchResults.value + newItems).toImmutableList()
+                if (pageResult.items.isNotEmpty()) {
+                    val existingKeys = _searchResults.value.map { item ->
+                        when (item) {
+                            is SearchResultItem.SongItem -> "song_${item.song.id}"
+                            is SearchResultItem.AlbumItem -> "album_${item.album.id}"
+                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
+                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
+                        }
+                    }.toSet()
+
+                    val newUniqueItems = pageResult.items.filter { item ->
+                        val key = when (item) {
+                            is SearchResultItem.SongItem -> "song_${item.song.id}"
+                            is SearchResultItem.AlbumItem -> "album_${item.album.id}"
+                            is SearchResultItem.ArtistItem -> "artist_${item.artist.id}"
+                            is SearchResultItem.PlaylistItem -> "playlist_${item.playlist.id}"
+                        }
+                        key !in existingKeys
+                    }
+
+                    if (newUniqueItems.isNotEmpty()) {
+                        _searchResults.value = (_searchResults.value + newUniqueItems).toImmutableList()
                     }
                 }
             } catch (e: Exception) {

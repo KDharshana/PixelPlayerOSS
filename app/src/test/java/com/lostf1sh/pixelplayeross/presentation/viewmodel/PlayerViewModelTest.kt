@@ -147,6 +147,7 @@ class PlayerViewModelTest {
         every { mockSearchStateHolder.searchResults } returns _searchResultsFlow
         every { mockSearchStateHolder.selectedSearchFilter } returns _selectedSearchFilterFlow
         every { mockSearchStateHolder.isLoadingMore } returns MutableStateFlow(false)
+        every { mockSearchStateHolder.isSearchingOnline } returns MutableStateFlow(false)
         every { mockSearchStateHolder.loadSearchHistory(any()) } just runs
         every { mockSearchStateHolder.clearSearchHistory() } just runs
         every { mockSearchStateHolder.deleteSearchHistoryItem(any()) } just runs

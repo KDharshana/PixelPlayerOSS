@@ -35,6 +35,11 @@ class InnertubeApiService @Inject constructor(
         private const val CLIENT_VERSION = "1.20240301.01.00"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
+        const val YTM_FILTER_SONGS = "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D"
+        const val YTM_FILTER_ALBUMS = "EgWKAQIBAWoKEAkQBRAKEAMQBA%3D%3D"
+        const val YTM_FILTER_ARTISTS = "EgWKAQIgAWoKEAkQBRAKEAMQBA%3D%3D"
+        const val YTM_FILTER_PLAYLISTS = "EgWKAQIoAWoKEAkQBRAKEAMQBA%3D%3D"
+
         @Volatile
         var cachedPlayerJsUrl: String? = null
     }
@@ -264,8 +269,12 @@ class InnertubeApiService @Inject constructor(
         null
     }
 
-    suspend fun search(query: String, continuation: String? = null): InnertubeSearchResult = withContext(Dispatchers.IO) {
-        android.util.Log.d("YouTubeMusic", "search requested: query='$query', continuation=${continuation != null}")
+    suspend fun search(
+        query: String,
+        params: String? = YTM_FILTER_SONGS,
+        continuation: String? = null
+    ): InnertubeSearchResult = withContext(Dispatchers.IO) {
+        android.util.Log.d("YouTubeMusic", "search requested: query='$query', params='$params', continuation=${continuation != null}")
         try {
             val body = JSONObject().apply {
                 put("context", createBaseContext())
@@ -273,7 +282,9 @@ class InnertubeApiService @Inject constructor(
                     put("continuation", continuation)
                 } else {
                     put("query", query)
-                    put("params", "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D") // Filter exclusively for Songs (no YouTube videos)
+                    if (!params.isNullOrBlank()) {
+                        put("params", params)
+                    }
                 }
             }
             val request = buildRequest("search", body)
@@ -285,7 +296,7 @@ class InnertubeApiService @Inject constructor(
             val responseBody = response.body?.string() ?: return@withContext InnertubeSearchResult(query)
             extractVisitorData(responseBody)
             val result = InnertubeParser.parseSearchResults(query, responseBody)
-            android.util.Log.d("YouTubeMusic", "Search results for '$query': ${result.songs.size} songs, continuation=${result.continuationToken != null}")
+            android.util.Log.d("YouTubeMusic", "Search results for '$query': ${result.songs.size} songs, ${result.albums.size} albums, ${result.playlists.size} playlists, ${result.artists.size} artists, continuation=${result.continuationToken != null}")
             result
         } catch (e: Exception) {
             android.util.Log.e("YouTubeMusic", "Error searching Innertube for: $query", e)

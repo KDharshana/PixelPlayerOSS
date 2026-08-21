@@ -131,7 +131,8 @@ import androidx.compose.ui.res.stringResource
 private data class SearchUiSlice(
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
     val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
-    val isLoadingMoreSearchResults: Boolean = false
+    val isLoadingMoreSearchResults: Boolean = false,
+    val isSearchingOnline: Boolean = false
 )
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -157,7 +158,8 @@ fun SearchScreen(
                 SearchUiSlice(
                     selectedSearchFilter = uiState.selectedSearchFilter,
                     searchResults = uiState.searchResults,
-                    isLoadingMoreSearchResults = uiState.isLoadingMoreSearchResults
+                    isLoadingMoreSearchResults = uiState.isLoadingMoreSearchResults,
+                    isSearchingOnline = uiState.isSearchingOnline
                 )
             }
             .distinctUntilChanged()
@@ -389,6 +391,17 @@ fun SearchScreen(
                             SearchFilterChip(SearchFilterType.ALBUMS, currentFilter, playerViewModel)
                             SearchFilterChip(SearchFilterType.ARTISTS, currentFilter, playerViewModel)
                             SearchFilterChip(SearchFilterType.PLAYLISTS, currentFilter, playerViewModel)
+                        }
+                        if (searchUiState.isSearchingOnline) {
+                            androidx.compose.material3.LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    .height(2.dp)
+                                    .clip(RoundedCornerShape(1.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
+                            )
                         }
                         Crossfade(
                             targetState = searchResults.isEmpty(),

@@ -4,8 +4,11 @@ import com.lostf1sh.pixelplayeross.data.database.YouTubeDao
 import com.lostf1sh.pixelplayeross.data.database.YouTubePlaylistEntity
 import com.lostf1sh.pixelplayeross.data.database.YouTubeSongEntity
 import com.lostf1sh.pixelplayeross.data.model.Song
+import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeAlbum
+import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeArtist
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeApiService
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeBrowseSection
+import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubePlaylist
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeSearchResult
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeTrack
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +53,18 @@ class YouTubeRepository @Inject constructor(
         val continuationToken: String?
     )
 
+    data class YouTubeMultiPageResult(
+        val items: List<com.lostf1sh.pixelplayeross.data.model.SearchResultItem>,
+        val continuationToken: String?
+    )
+
+    data class HomeRecommendations(
+        val fromCommunity: List<Song> = emptyList(),
+        val trendingCommunityPlaylists: List<com.lostf1sh.pixelplayeross.data.model.Playlist> = emptyList(),
+        val featuredPlaylists: List<com.lostf1sh.pixelplayeross.data.model.Playlist> = emptyList(),
+        val mixedForYou: List<com.lostf1sh.pixelplayeross.data.model.Playlist> = emptyList()
+    )
+
     /**
      * Searches YouTube Music for songs matching the query with continuation support.
      */
@@ -57,9 +72,91 @@ class YouTubeRepository @Inject constructor(
         if (query.isBlank() && continuation.isNullOrBlank()) {
             return@withContext YouTubePageResult(emptyList(), null)
         }
-        val result = innertubeApiService.search(query, continuation)
+        val result = innertubeApiService.search(query, InnertubeApiService.YTM_FILTER_SONGS, continuation)
         val songs = result.songs.map { it.toDomainSong() }
         YouTubePageResult(songs, result.continuationToken)
+    }
+
+    /**
+     * Searches YouTube Music across multi-category filters (Songs, Albums, Artists, Playlists).
+     */
+    suspend fun searchAllPaginated(
+        query: String,
+        filterType: com.lostf1sh.pixelplayeross.data.model.SearchFilterType = com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALL,
+        continuation: String? = null
+    ): YouTubeMultiPageResult = withContext(Dispatchers.IO) {
+        if (query.isBlank() && continuation.isNullOrBlank()) {
+            return@withContext YouTubeMultiPageResult(emptyList(), null)
+        }
+        val params = when (filterType) {
+            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALL -> null
+            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.SONGS -> InnertubeApiService.YTM_FILTER_SONGS
+            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ALBUMS -> InnertubeApiService.YTM_FILTER_ALBUMS
+            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ARTISTS -> InnertubeApiService.YTM_FILTER_ARTISTS
+            com.lostf1sh.pixelplayeross.data.model.SearchFilterType.PLAYLISTS -> InnertubeApiService.YTM_FILTER_PLAYLISTS
+        }
+        val result = innertubeApiService.search(query, params, continuation)
+        val items = mutableListOf<com.lostf1sh.pixelplayeross.data.model.SearchResultItem>()
+        result.songs.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.SongItem(it.toDomainSong())) }
+        result.albums.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.AlbumItem(it.toDomainAlbum())) }
+        result.artists.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.ArtistItem(it.toDomainArtist())) }
+        result.playlists.forEach { items.add(com.lostf1sh.pixelplayeross.data.model.SearchResultItem.PlaylistItem(it.toDomainPlaylist())) }
+        YouTubeMultiPageResult(items, result.continuationToken)
+    }
+
+    /**
+     * Fetches categorized recommendations from YouTube Music browse feed.
+     */
+    suspend fun getHomeRecommendations(): HomeRecommendations = withContext(Dispatchers.IO) {
+        try {
+            val sections = innertubeApiService.getBrowse("FEmusic_home")
+            val communitySongs = mutableListOf<Song>()
+            val trendingPlaylists = mutableListOf<com.lostf1sh.pixelplayeross.data.model.Playlist>()
+            val featuredPlaylists = mutableListOf<com.lostf1sh.pixelplayeross.data.model.Playlist>()
+            val mixedPlaylists = mutableListOf<com.lostf1sh.pixelplayeross.data.model.Playlist>()
+
+            for (section in sections) {
+                val titleLower = section.title.lowercase()
+                val subtitleLower = section.subtitle?.lowercase() ?: ""
+                when {
+                    titleLower.contains("mix") || titleLower.contains("for you") || subtitleLower.contains("mix") -> {
+                        mixedPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
+                    }
+                    titleLower.contains("trending") || titleLower.contains("community") || titleLower.contains("popular") -> {
+                        trendingPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
+                        communitySongs.addAll(section.tracks.map { it.toDomainSong() })
+                    }
+                    titleLower.contains("featured") || titleLower.contains("today") || titleLower.contains("charts") || titleLower.contains("hits") -> {
+                        featuredPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
+                        if (communitySongs.isEmpty()) {
+                            communitySongs.addAll(section.tracks.map { it.toDomainSong() })
+                        }
+                    }
+                    else -> {
+                        if (mixedPlaylists.size < 6 && section.playlists.isNotEmpty()) {
+                            mixedPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
+                        } else if (trendingPlaylists.size < 6 && section.playlists.isNotEmpty()) {
+                            trendingPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
+                        } else {
+                            featuredPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
+                        }
+                        if (communitySongs.size < 20) {
+                            communitySongs.addAll(section.tracks.map { it.toDomainSong() })
+                        }
+                    }
+                }
+            }
+
+            HomeRecommendations(
+                fromCommunity = communitySongs.distinctBy { it.id },
+                trendingCommunityPlaylists = trendingPlaylists.distinctBy { it.id },
+                featuredPlaylists = featuredPlaylists.distinctBy { it.id },
+                mixedForYou = mixedPlaylists.distinctBy { it.id }
+            )
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to load home recommendations")
+            HomeRecommendations()
+        }
     }
 
     /**
@@ -178,6 +275,41 @@ class YouTubeRepository @Inject constructor(
             bitrate = 160000,
             sampleRate = 48000,
             youtubeId = videoId
+        )
+    }
+
+    private fun InnertubeAlbum.toDomainAlbum(): com.lostf1sh.pixelplayeross.data.model.Album {
+        val calculatedId = -Math.abs(browseId.hashCode().toLong())
+        return com.lostf1sh.pixelplayeross.data.model.Album(
+            id = calculatedId,
+            title = title,
+            artist = artist,
+            year = year ?: 0,
+            dateAdded = System.currentTimeMillis(),
+            albumArtUriString = thumbnailUri,
+            songCount = trackCount,
+            albumArtist = artist
+        )
+    }
+
+    private fun InnertubeArtist.toDomainArtist(): com.lostf1sh.pixelplayeross.data.model.Artist {
+        val calculatedId = -Math.abs(browseId.hashCode().toLong())
+        return com.lostf1sh.pixelplayeross.data.model.Artist(
+            id = calculatedId,
+            name = name,
+            songCount = 0,
+            imageUrl = thumbnailUri,
+            customImageUri = null
+        )
+    }
+
+    private fun InnertubePlaylist.toDomainPlaylist(): com.lostf1sh.pixelplayeross.data.model.Playlist {
+        return com.lostf1sh.pixelplayeross.data.model.Playlist(
+            id = playlistId,
+            name = title,
+            songIds = emptyList(),
+            coverImageUri = thumbnailUri,
+            source = "YOUTUBE"
         )
     }
 }

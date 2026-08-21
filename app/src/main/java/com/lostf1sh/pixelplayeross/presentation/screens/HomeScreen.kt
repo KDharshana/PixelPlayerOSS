@@ -91,6 +91,8 @@ import com.lostf1sh.pixelplayeross.presentation.navidrome.dashboard.NavidromeDas
 import com.lostf1sh.pixelplayeross.presentation.components.DailyMixSection
 import com.lostf1sh.pixelplayeross.presentation.components.HomeGradientTopBar
 import com.lostf1sh.pixelplayeross.presentation.components.HomeOptionsBottomSheet
+import com.lostf1sh.pixelplayeross.presentation.components.HorizontalPlaylistCarouselSection
+import com.lostf1sh.pixelplayeross.presentation.components.HorizontalSongCarouselSection
 import com.lostf1sh.pixelplayeross.presentation.components.MiniPlayerHeight
 import com.lostf1sh.pixelplayeross.presentation.components.RecentlyPlayedSection
 import com.lostf1sh.pixelplayeross.presentation.components.RecentlyPlayedSectionMinSongsToShow
@@ -141,7 +143,16 @@ fun HomeScreen(
     val curatedYourMixSongs by playerViewModel.yourMixSongs.collectAsStateWithLifecycle()
     val homeMixPreviewSongs by playerViewModel.homeMixPreviewSongs.collectAsStateWithLifecycle()
     val playbackHistory by playerViewModel.playbackHistory.collectAsStateWithLifecycle()
+    val keepListeningSongs by playerViewModel.keepListeningSongs.collectAsStateWithLifecycle()
+    val fromCommunitySongs by playerViewModel.fromCommunitySongs.collectAsStateWithLifecycle()
+    val trendingCommunityPlaylists by playerViewModel.trendingCommunityPlaylists.collectAsStateWithLifecycle()
+    val featuredPlaylists by playerViewModel.featuredPlaylists.collectAsStateWithLifecycle()
+    val mixedForYouPlaylists by playerViewModel.mixedForYouPlaylists.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(Unit) {
+        playerViewModel.loadHomeRecommendations()
+    }
 
     val usesFallbackHomeMix = remember(curatedYourMixSongs, dailyMixSongs) {
         curatedYourMixSongs.isEmpty() && dailyMixSongs.isEmpty()
@@ -229,6 +240,12 @@ fun HomeScreen(
     val isShuffleEnabled by remember(playerViewModel.stablePlayerState) {
         playerViewModel.stablePlayerState
             .map { it.isShuffleEnabled }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = false)
+
+    val isPlaying by remember(playerViewModel.stablePlayerState) {
+        playerViewModel.stablePlayerState
+            .map { it.isPlaying }
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
 
@@ -454,6 +471,90 @@ fun HomeScreen(
                             themeStateHolder = playerViewModel.themeStateHolder,
                             currentSongId = currentSong?.id,
                             contentPadding = PaddingValues(start = 8.dp, end = 24.dp)
+                        )
+                    }
+                }
+
+                if (keepListeningSongs.isNotEmpty()) {
+                    item(
+                        key = "keep_listening_section",
+                        contentType = "keep_listening_section"
+                    ) {
+                        HorizontalSongCarouselSection(
+                            title = "Keep Listening",
+                            subtitle = "Pick up where you left off",
+                            songs = keepListeningSongs,
+                            currentPlayingSongId = currentSong?.id,
+                            isPlaying = isPlaying,
+                            onSongClick = { song ->
+                                playerViewModel.showAndPlaySong(song, keepListeningSongs, "Keep Listening")
+                            }
+                        )
+                    }
+                }
+
+                if (mixedForYouPlaylists.isNotEmpty()) {
+                    item(
+                        key = "mixed_for_you_section",
+                        contentType = "mixed_for_you_section"
+                    ) {
+                        HorizontalPlaylistCarouselSection(
+                            title = "Mixed For You",
+                            subtitle = "Personalized genre & mood mixes",
+                            playlists = mixedForYouPlaylists,
+                            onPlaylistClick = { playlist ->
+                                navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
+                            }
+                        )
+                    }
+                }
+
+                if (fromCommunitySongs.isNotEmpty()) {
+                    item(
+                        key = "from_community_section",
+                        contentType = "from_community_section"
+                    ) {
+                        HorizontalSongCarouselSection(
+                            title = "From Community",
+                            subtitle = "Trending hits & community favorites",
+                            songs = fromCommunitySongs,
+                            currentPlayingSongId = currentSong?.id,
+                            isPlaying = isPlaying,
+                            onSongClick = { song ->
+                                playerViewModel.showAndPlaySong(song, fromCommunitySongs, "From Community")
+                            }
+                        )
+                    }
+                }
+
+                if (trendingCommunityPlaylists.isNotEmpty()) {
+                    item(
+                        key = "trending_community_playlists_section",
+                        contentType = "trending_community_playlists_section"
+                    ) {
+                        HorizontalPlaylistCarouselSection(
+                            title = "Trending Community Playlists",
+                            subtitle = "Popular public playlists from creators",
+                            playlists = trendingCommunityPlaylists,
+                            onPlaylistClick = { playlist ->
+                                navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
+                            }
+                        )
+                    }
+                }
+
+                if (featuredPlaylists.isNotEmpty()) {
+                    item(
+                        key = "featured_playlists_section",
+                        contentType = "featured_playlists_section"
+                    ) {
+                        HorizontalPlaylistCarouselSection(
+                            title = "Featured Playlists For You",
+                            subtitle = "Curated collections & top charts",
+                            playlists = featuredPlaylists,
+                            onPlaylistClick = { playlist ->
+                                navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
+                            }
                         )
                     }
                 }
