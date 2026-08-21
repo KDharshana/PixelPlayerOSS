@@ -1086,6 +1086,7 @@ class PlayerViewModel @Inject constructor(
 
     fun updateSearchQuery(query: String) {
         searchQuery = query
+        searchStateHolder.performSearch(query)
     }
 
     private var mediaController: MediaController? = null
