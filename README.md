@@ -16,6 +16,9 @@
   <a href="https://github.com/sponsors/lostf1sh">
     <img src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub Sponsors">
   </a>
+  <a href="https://github.com/dharshan-X">
+    <img src="https://img.shields.io/badge/Maintained%20by-dharshan--X-007ACC?style=for-the-badge&logo=github&logoColor=white" alt="Maintained by dharshan-X">
+  </a>
   <img src="https://img.shields.io/badge/Android-11%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 11+">
   <img src="https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge" alt="GPLv3 license">
 </p>
@@ -215,5 +218,5 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 Distributed APKs include third-party components under their own licenses. In particular, the optional FFmpeg decoder dependency `org.jellyfin.media3:media3-ffmpeg-decoder` is GPL-3.0; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 <p align="center">
-  Maintained by <a href="https://github.com/lostf1sh">lostf1sh</a>
+  Maintained by <a href="https://github.com/dharshan-X">dharshan-X</a>
 </p>
