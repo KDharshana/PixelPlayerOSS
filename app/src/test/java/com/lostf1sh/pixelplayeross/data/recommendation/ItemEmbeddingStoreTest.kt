@@ -3,21 +3,21 @@ package com.lostf1sh.pixelplayeross.data.recommendation
 import com.google.common.truth.Truth.assertThat
 import com.lostf1sh.pixelplayeross.data.database.ItemCooccurrenceDao
 import com.lostf1sh.pixelplayeross.data.database.ItemCooccurrenceEntity
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
-import org.mockito.Mockito.`when`
-import org.mockito.Mockito.mock
-import org.mockito.Mockito.verify
 
 class ItemEmbeddingStoreTest {
 
-    private val dao = mock(ItemCooccurrenceDao::class.java)
+    private val dao: ItemCooccurrenceDao = mockk(relaxed = true)
     private val store = ItemEmbeddingStore(dao)
 
     @Test
     fun `recordPairwisePlay normalizes key order before DAO increment`() = runTest {
         store.recordPairwisePlay("song_z", "song_a", 1000L)
-        verify(dao).incrementCooccurrence("song_a", "song_z", 1000L)
+        coVerify { dao.incrementCooccurrence("song_a", "song_z", 1000L) }
     }
 
     @Test
@@ -26,7 +26,7 @@ class ItemEmbeddingStoreTest {
             ItemCooccurrenceEntity("song_1", "song_2", cooccurrenceCount = 10),
             ItemCooccurrenceEntity("song_1", "song_3", cooccurrenceCount = 5)
         )
-        `when`(dao.getCooccurrencesForSong("song_1", 20)).thenReturn(rows)
+        coEvery { dao.getCooccurrencesForSong("song_1", 20) } returns rows
 
         val similar = store.getSimilarSongs("song_1", 10)
         assertThat(similar).hasSize(2)

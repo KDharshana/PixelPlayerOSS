@@ -10,24 +10,36 @@ class PersonalizedRankerTest {
 
     private val ranker = PersonalizedRanker()
 
+    private fun testSong(id: String, title: String, artist: String, artistId: Long): Song = Song(
+        id = id,
+        title = title,
+        artist = artist,
+        artistId = artistId,
+        album = "Album",
+        albumId = 10L,
+        path = "path/$id",
+        contentUriString = "content://music/$id",
+        albumArtUriString = null,
+        duration = 180000L,
+        mimeType = "audio/mpeg",
+        bitrate = 320000,
+        sampleRate = 44100
+    )
+
     @Test
     fun `rank gives higher score to completed tracks vs frequently skipped tracks`() {
-        val songCompleted = Song(
+        val songCompleted = testSong(
             id = "song_completed",
             title = "Completed Track",
             artist = "Artist A",
-            artistId = 1L,
-            path = "path/1",
-            duration = 180000L
+            artistId = 1L
         )
 
-        val songSkipped = Song(
+        val songSkipped = testSong(
             id = "song_skipped",
             title = "Skipped Track",
             artist = "Artist B",
-            artistId = 2L,
-            path = "path/2",
-            duration = 180000L
+            artistId = 2L
         )
 
         val candidateCompleted = RecommendationCandidate(
@@ -74,13 +86,11 @@ class PersonalizedRankerTest {
     @Test
     fun `pickWithDiversity respects max artist limits`() {
         val songs = (1..6).map { i ->
-            Song(
+            testSong(
                 id = "song_$i",
                 title = "Title $i",
                 artist = "Same Artist",
-                artistId = 99L,
-                path = "path/$i",
-                duration = 180000L
+                artistId = 99L
             )
         }
 

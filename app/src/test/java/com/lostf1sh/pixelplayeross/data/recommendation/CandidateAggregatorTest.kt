@@ -1,21 +1,34 @@
 package com.lostf1sh.pixelplayeross.data.recommendation
 
 import com.google.common.truth.Truth.assertThat
+import com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzRepository
 import com.lostf1sh.pixelplayeross.data.model.Song
+import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
+import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
+import io.mockk.mockk
 import org.junit.jupiter.api.Test
 
 class CandidateAggregatorTest {
 
+    private fun testSong(id: String, title: String, artist: String): Song = Song(
+        id = id,
+        title = title,
+        artist = artist,
+        artistId = 10L,
+        album = "Album",
+        albumId = 10L,
+        path = "path/$id",
+        contentUriString = "content://music/$id",
+        albumArtUriString = null,
+        duration = 180000L,
+        mimeType = "audio/mpeg",
+        bitrate = 320000,
+        sampleRate = 44100
+    )
+
     @Test
     fun `deduplicateCandidates retains higher source strength candidate on duplicate`() {
-        val song1 = Song(
-            id = "1",
-            title = "Track A",
-            artist = "Artist A",
-            artistId = 10L,
-            path = "path/1",
-            duration = 180000L
-        )
+        val song1 = testSong("1", "Track A", "Artist A")
 
         val candidateLow = RecommendationCandidate(
             song = song1,
@@ -30,10 +43,10 @@ class CandidateAggregatorTest {
         )
 
         val aggregator = CandidateAggregator(
-            youTubeRepository = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository::class.java),
-            listenBrainzRepository = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzRepository::class.java),
-            musicRepository = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.repository.MusicRepository::class.java),
-            itemEmbeddingStore = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.recommendation.ItemEmbeddingStore::class.java)
+            youTubeRepository = mockk<YouTubeRepository>(relaxed = true),
+            listenBrainzRepository = mockk<ListenBrainzRepository>(relaxed = true),
+            musicRepository = mockk<MusicRepository>(relaxed = true),
+            itemEmbeddingStore = mockk<ItemEmbeddingStore>(relaxed = true)
         )
 
         val deduplicated = aggregator.deduplicateCandidates(listOf(candidateLow, candidateHigh))

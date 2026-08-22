@@ -21,6 +21,7 @@ class ListeningStatsTrackerTest {
     private val dailyMixManager: DailyMixManager = mockk(relaxed = true)
     private val playbackStatsRepository: PlaybackStatsRepository = mockk(relaxed = true)
     private val scrobbleManager: ScrobbleManager = mockk(relaxed = true)
+    private val itemEmbeddingStore: com.lostf1sh.pixelplayeross.data.recommendation.ItemEmbeddingStore = mockk(relaxed = true)
 
     @BeforeEach
     fun setUp() {
@@ -37,7 +38,8 @@ class ListeningStatsTrackerTest {
         val tracker = ListeningStatsTracker(
             dailyMixManager = dailyMixManager,
             playbackStatsRepository = playbackStatsRepository,
-            scrobbleManager = scrobbleManager
+            scrobbleManager = scrobbleManager,
+            itemEmbeddingStore = itemEmbeddingStore
         )
         val song = song(
             songId = "looped-song",
@@ -71,7 +73,8 @@ class ListeningStatsTrackerTest {
         val tracker = ListeningStatsTracker(
             dailyMixManager = dailyMixManager,
             playbackStatsRepository = playbackStatsRepository,
-            scrobbleManager = scrobbleManager
+            scrobbleManager = scrobbleManager,
+            itemEmbeddingStore = itemEmbeddingStore
         )
         val song = song(songId = "song-1")
         val firstChunkMs = 7_000L
