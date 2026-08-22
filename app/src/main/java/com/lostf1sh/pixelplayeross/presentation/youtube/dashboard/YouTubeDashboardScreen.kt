@@ -117,6 +117,7 @@ fun YouTubeDashboardScreen(
                 }
                 is YouTubeDashboardUiState.Success -> {
                     DashboardContent(
+                        forYou = state.forYou,
                         sections = state.sections,
                         onSongClick = onSongClick
                     )
@@ -128,6 +129,7 @@ fun YouTubeDashboardScreen(
 
 @Composable
 private fun DashboardContent(
+    forYou: List<Song>,
     sections: List<InnertubeBrowseSection>,
     onSongClick: (Song) -> Unit
 ) {
@@ -135,10 +137,89 @@ private fun DashboardContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 96.dp)
     ) {
+        if (forYou.isNotEmpty()) {
+            item(key = "for_you_section") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Text(
+                            text = "For You",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Personalized mix blended from your taste",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(forYou, key = { it.id }) { song ->
+                            ForYouSongCard(song = song, onClick = { onSongClick(song) })
+                        }
+                    }
+                }
+            }
+        }
+
         items(sections) { section ->
             BrowseSectionItem(
                 section = section,
                 onSongClick = onSongClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun ForYouSongCard(
+    song: Song,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(124.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            ) {
+                AsyncImage(
+                    model = song.albumArtUriString ?: song.path,
+                    contentDescription = song.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.artist,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
