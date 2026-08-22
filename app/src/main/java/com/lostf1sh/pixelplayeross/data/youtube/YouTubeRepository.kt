@@ -12,6 +12,7 @@ import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubePlaylist
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeSearchResult
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeTrack
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -62,7 +63,9 @@ class YouTubeRepository @Inject constructor(
         val fromCommunity: List<Song> = emptyList(),
         val trendingCommunityPlaylists: List<com.lostf1sh.pixelplayeross.data.model.Playlist> = emptyList(),
         val featuredPlaylists: List<com.lostf1sh.pixelplayeross.data.model.Playlist> = emptyList(),
-        val mixedForYou: List<com.lostf1sh.pixelplayeross.data.model.Playlist> = emptyList()
+        val mixedForYou: List<com.lostf1sh.pixelplayeross.data.model.Playlist> = emptyList(),
+        val newAlbums: List<com.lostf1sh.pixelplayeross.data.model.Album> = emptyList(),
+        val quickPicks: List<Song> = emptyList()
     )
 
     /**
@@ -118,16 +121,30 @@ class YouTubeRepository @Inject constructor(
      */
     suspend fun getHomeRecommendations(): HomeRecommendations = withContext(Dispatchers.IO) {
         try {
-            val sections = innertubeApiService.getBrowse("FEmusic_home")
+            val homeDeferred = async { innertubeApiService.getBrowse("FEmusic_home") }
+            val exploreDeferred = async { innertubeApiService.getBrowse("FEmusic_explore") }
+
+            val homeSections = homeDeferred.await()
+            val exploreSections = exploreDeferred.await()
+            val sections = homeSections + exploreSections
+
             val communitySongs = mutableListOf<Song>()
             val trendingPlaylists = mutableListOf<com.lostf1sh.pixelplayeross.data.model.Playlist>()
             val featuredPlaylists = mutableListOf<com.lostf1sh.pixelplayeross.data.model.Playlist>()
             val mixedPlaylists = mutableListOf<com.lostf1sh.pixelplayeross.data.model.Playlist>()
+            val newAlbums = mutableListOf<com.lostf1sh.pixelplayeross.data.model.Album>()
+            val quickPicks = mutableListOf<Song>()
 
             for (section in sections) {
                 val titleLower = section.title.lowercase()
                 val subtitleLower = section.subtitle?.lowercase() ?: ""
+
+                section.albums.forEach { newAlbums.add(it.toDomainAlbum()) }
+
                 when {
+                    titleLower.contains("quick pick") || titleLower.contains("start radio") || titleLower.contains("listen again") -> {
+                        quickPicks.addAll(section.tracks.map { it.toDomainSong() })
+                    }
                     titleLower.contains("mix") || titleLower.contains("for you") || subtitleLower.contains("mix") -> {
                         mixedPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
                     }
@@ -135,32 +152,37 @@ class YouTubeRepository @Inject constructor(
                         trendingPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
                         communitySongs.addAll(section.tracks.map { it.toDomainSong() })
                     }
-                    titleLower.contains("featured") || titleLower.contains("today") || titleLower.contains("charts") || titleLower.contains("hits") -> {
+                    titleLower.contains("featured") || titleLower.contains("today") || titleLower.contains("charts") || titleLower.contains("hits") || titleLower.contains("biggest hits") -> {
                         featuredPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
-                        if (communitySongs.isEmpty()) {
-                            communitySongs.addAll(section.tracks.map { it.toDomainSong() })
-                        }
+                        communitySongs.addAll(section.tracks.map { it.toDomainSong() })
+                    }
+                    titleLower.contains("new") || titleLower.contains("single") || titleLower.contains("release") -> {
+                        communitySongs.addAll(section.tracks.map { it.toDomainSong() })
                     }
                     else -> {
-                        if (mixedPlaylists.size < 6 && section.playlists.isNotEmpty()) {
+                        if (mixedPlaylists.size < 10 && section.playlists.isNotEmpty()) {
                             mixedPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
-                        } else if (trendingPlaylists.size < 6 && section.playlists.isNotEmpty()) {
+                        } else if (trendingPlaylists.size < 10 && section.playlists.isNotEmpty()) {
                             trendingPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
                         } else {
                             featuredPlaylists.addAll(section.playlists.map { it.toDomainPlaylist() })
                         }
-                        if (communitySongs.size < 20) {
+                        if (communitySongs.size < 30) {
                             communitySongs.addAll(section.tracks.map { it.toDomainSong() })
                         }
                     }
                 }
             }
 
+            val finalQuickPicks = if (quickPicks.isNotEmpty()) quickPicks else communitySongs.take(10)
+
             HomeRecommendations(
                 fromCommunity = communitySongs.distinctBy { it.id },
                 trendingCommunityPlaylists = trendingPlaylists.distinctBy { it.id },
                 featuredPlaylists = featuredPlaylists.distinctBy { it.id },
-                mixedForYou = mixedPlaylists.distinctBy { it.id }
+                mixedForYou = mixedPlaylists.distinctBy { it.id },
+                newAlbums = newAlbums.distinctBy { it.id },
+                quickPicks = finalQuickPicks.distinctBy { it.id }
             )
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "Failed to load home recommendations")

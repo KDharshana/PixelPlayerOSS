@@ -91,6 +91,7 @@ import com.lostf1sh.pixelplayeross.presentation.navidrome.dashboard.NavidromeDas
 import com.lostf1sh.pixelplayeross.presentation.components.DailyMixSection
 import com.lostf1sh.pixelplayeross.presentation.components.HomeGradientTopBar
 import com.lostf1sh.pixelplayeross.presentation.components.HomeOptionsBottomSheet
+import com.lostf1sh.pixelplayeross.presentation.components.HorizontalAlbumCarouselSection
 import com.lostf1sh.pixelplayeross.presentation.components.HorizontalPlaylistCarouselSection
 import com.lostf1sh.pixelplayeross.presentation.components.HorizontalSongCarouselSection
 import com.lostf1sh.pixelplayeross.presentation.components.MiniPlayerHeight
@@ -108,6 +109,8 @@ import com.lostf1sh.pixelplayeross.presentation.viewmodel.PlayerViewModel
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SettingsViewModel
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.StatsViewModel
 import com.lostf1sh.pixelplayeross.ui.theme.ExpTitleTypography
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
@@ -121,8 +124,14 @@ import com.lostf1sh.pixelplayeross.presentation.components.rememberModalSheetSta
 
 private const val HomeLoadingPlaceholderMinDurationMillis = 1200L
 
+enum class HomeFilter {
+    ALL,
+    YOUTUBE_MUSIC,
+    LOCAL_ONLY
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
@@ -148,6 +157,9 @@ fun HomeScreen(
     val trendingCommunityPlaylists by playerViewModel.trendingCommunityPlaylists.collectAsStateWithLifecycle()
     val featuredPlaylists by playerViewModel.featuredPlaylists.collectAsStateWithLifecycle()
     val mixedForYouPlaylists by playerViewModel.mixedForYouPlaylists.collectAsStateWithLifecycle()
+    val newAlbums by playerViewModel.newAlbums.collectAsStateWithLifecycle()
+    val quickPicks by playerViewModel.quickPicks.collectAsStateWithLifecycle()
+    var selectedHomeFilter by rememberSaveable { mutableStateOf(HomeFilter.ALL) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(Unit) {
@@ -341,83 +353,175 @@ fun HomeScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                if (yourMixSongs.isEmpty()) {
-                    item(
-                        key = "your_mix_placeholder",
-                        contentType = "your_mix_placeholder"
+                item(
+                    key = "home_filter_chips_row",
+                    contentType = "home_filter_chips_row"
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (shouldShowYourMixLoadingPlaceholder) {
-                            YourMixLoadingPlaceholder()
-                        } else {
-                            YourMixEmptyPlaceholder(
-                                onRefresh = {
-                                    homePlaceholderRefreshGeneration++
-                                    settingsViewModel.refreshLibrary()
-                                    playerViewModel.forceUpdateDailyMix()
+                        ToggleButton(
+                            checked = selectedHomeFilter == HomeFilter.ALL,
+                            onCheckedChange = { selectedHomeFilter = HomeFilter.ALL },
+                            colors = ToggleButtonDefaults.toggleButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                checkedContainerColor = MaterialTheme.colorScheme.primary,
+                                checkedContentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("All", style = MaterialTheme.typography.labelMedium)
+                        }
+
+                        ToggleButton(
+                            checked = selectedHomeFilter == HomeFilter.YOUTUBE_MUSIC,
+                            onCheckedChange = { selectedHomeFilter = HomeFilter.YOUTUBE_MUSIC },
+                            colors = ToggleButtonDefaults.toggleButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                checkedContainerColor = MaterialTheme.colorScheme.primary,
+                                checkedContentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MusicNote,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("YouTube Music", style = MaterialTheme.typography.labelMedium)
+                        }
+
+                        ToggleButton(
+                            checked = selectedHomeFilter == HomeFilter.LOCAL_ONLY,
+                            onCheckedChange = { selectedHomeFilter = HomeFilter.LOCAL_ONLY },
+                            colors = ToggleButtonDefaults.toggleButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                checkedContainerColor = MaterialTheme.colorScheme.primary,
+                                checkedContentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("Local Only", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+
+                if (selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
+                    if (yourMixSongs.isEmpty()) {
+                        item(
+                            key = "your_mix_placeholder",
+                            contentType = "your_mix_placeholder"
+                        ) {
+                            if (shouldShowYourMixLoadingPlaceholder) {
+                                YourMixLoadingPlaceholder()
+                            } else {
+                                YourMixEmptyPlaceholder(
+                                    onRefresh = {
+                                        homePlaceholderRefreshGeneration++
+                                        settingsViewModel.refreshLibrary()
+                                        playerViewModel.forceUpdateDailyMix()
+                                    }
+                                )
+                            }
+                        }
+                    } else {
+                        item(
+                            key = "your_mix_header",
+                            contentType = "your_mix_header"
+                        ) {
+                            YourMixHeader(
+                                song = yourMixSong,
+                                isShuffleEnabled = isShuffleEnabled,
+                                onPlayShuffled = {
+                                    if (usesFallbackHomeMix) {
+                                        playerViewModel.shuffleAllSongs(queueName = "Your Mix")
+                                    } else {
+                                        playerViewModel.playSongsShuffled(
+                                            songsToPlay = yourMixSongs,
+                                            queueName = "Your Mix",
+                                            startAtZero = true,
+                                        )
+                                    }
+                                }
+                            )
+                        }
+
+                        item(
+                            key = "album_art_collage",
+                            contentType = "album_art_collage"
+                        ) {
+                            val basePattern = settingsUiState.collagePattern
+                            val isAutoRotate = settingsUiState.collageAutoRotate
+                            val patterns = remember { CollagePattern.entries }
+
+                            val activePattern = if (isAutoRotate) {
+                                var rotationIndex by rememberSaveable { mutableIntStateOf(-1) }
+                                LaunchedEffect(Unit) { rotationIndex++ }
+                                remember(rotationIndex) {
+                                    patterns[rotationIndex.coerceAtLeast(0) % patterns.size]
+                                }
+                            } else {
+                                basePattern
+                            }
+
+                            AlbumArtCollage(
+                                modifier = Modifier.fillMaxWidth(),
+                                songs = yourMixSongs,
+                                padding = 14.dp,
+                                height = 400.dp,
+                                pattern = activePattern,
+                                onSongClick = { song ->
+                                    if (usesFallbackHomeMix) {
+                                        playerViewModel.showAndPlaySongFromLibrary(song, queueName = "Your Mix")
+                                    } else {
+                                        playerViewModel.showAndPlaySong(song, yourMixSongs, "Your Mix")
+                                    }
                                 }
                             )
                         }
                     }
-                } else {
-                    item(
-                        key = "your_mix_header",
-                        contentType = "your_mix_header"
-                    ) {
-                        YourMixHeader(
-                            song = yourMixSong,
-                            isShuffleEnabled = isShuffleEnabled,
-                            onPlayShuffled = {
-                                if (usesFallbackHomeMix) {
-                                    playerViewModel.shuffleAllSongs(queueName = "Your Mix")
-                                } else {
-                                    playerViewModel.playSongsShuffled(
-                                        songsToPlay = yourMixSongs,
-                                        queueName = "Your Mix",
-                                        startAtZero = true,
-                                    )
-                                }
-                            }
-                        )
-                    }
                 }
 
-                if (yourMixSongs.isNotEmpty()) {
+                if (quickPicks.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
                     item(
-                        key = "album_art_collage",
-                        contentType = "album_art_collage"
+                        key = "quick_picks_section",
+                        contentType = "quick_picks_section"
                     ) {
-                        val basePattern = settingsUiState.collagePattern
-                        val isAutoRotate = settingsUiState.collageAutoRotate
-                        val patterns = remember { CollagePattern.entries }
-
-                        val activePattern = if (isAutoRotate) {
-                            var rotationIndex by rememberSaveable { mutableIntStateOf(-1) }
-                            LaunchedEffect(Unit) { rotationIndex++ }
-                            remember(rotationIndex) {
-                                patterns[rotationIndex.coerceAtLeast(0) % patterns.size]
-                            }
-                        } else {
-                            basePattern
-                        }
-
-                        AlbumArtCollage(
-                            modifier = Modifier.fillMaxWidth(),
-                            songs = yourMixSongs,
-                            padding = 14.dp,
-                            height = 400.dp,
-                            pattern = activePattern,
+                        HorizontalSongCarouselSection(
+                            title = "Quick Picks",
+                            subtitle = "Instant radio & top tracks from YouTube Music",
+                            songs = quickPicks,
+                            currentPlayingSongId = currentSong?.id,
+                            isPlaying = isPlaying,
                             onSongClick = { song ->
-                                if (usesFallbackHomeMix) {
-                                    playerViewModel.showAndPlaySongFromLibrary(song, queueName = "Your Mix")
-                                } else {
-                                    playerViewModel.showAndPlaySong(song, yourMixSongs, "Your Mix")
-                                }
+                                playerViewModel.playSongWithSmartQueue(song, "Quick Picks")
                             }
                         )
                     }
                 }
 
-                if (dailyMixSongs.isNotEmpty()) {
+                if (newAlbums.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
+                    item(
+                        key = "new_albums_section",
+                        contentType = "new_albums_section"
+                    ) {
+                        HorizontalAlbumCarouselSection(
+                            title = "New Releases & Singles",
+                            subtitle = "Latest albums and tracks on YouTube Music",
+                            albums = newAlbums,
+                            onAlbumClick = { album ->
+                                navController.navigateSafely(Screen.AlbumDetail.createRoute(album.id))
+                            }
+                        )
+                    }
+                }
+
+                if (dailyMixSongs.isNotEmpty() && selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
                     item(
                         key = "daily_mix_section",
                         contentType = "daily_mix_section"
@@ -449,7 +553,7 @@ fun HomeScreen(
                     }
                 }
 
-                if (recentlyPlayedSongs.size >= RecentlyPlayedSectionMinSongsToShow) {
+                if (recentlyPlayedSongs.size >= RecentlyPlayedSectionMinSongsToShow && selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
                     item(
                         key = "recently_played_section",
                         contentType = "recently_played_section"
@@ -475,7 +579,7 @@ fun HomeScreen(
                     }
                 }
 
-                if (keepListeningSongs.isNotEmpty()) {
+                if (keepListeningSongs.isNotEmpty() && selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
                     item(
                         key = "keep_listening_section",
                         contentType = "keep_listening_section"
@@ -493,15 +597,15 @@ fun HomeScreen(
                     }
                 }
 
-                if (mixedForYouPlaylists.isNotEmpty()) {
+                if (featuredPlaylists.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
                     item(
-                        key = "mixed_for_you_section",
-                        contentType = "mixed_for_you_section"
+                        key = "featured_playlists_section",
+                        contentType = "featured_playlists_section"
                     ) {
                         HorizontalPlaylistCarouselSection(
-                            title = "Mixed For You",
-                            subtitle = "Personalized genre & mood mixes",
-                            playlists = mixedForYouPlaylists,
+                            title = "Featured Playlists & Charts",
+                            subtitle = "Curated collections & top charts from YouTube Music",
+                            playlists = featuredPlaylists,
                             onPlaylistClick = { playlist ->
                                 navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
                             }
@@ -509,25 +613,25 @@ fun HomeScreen(
                     }
                 }
 
-                if (fromCommunitySongs.isNotEmpty()) {
+                if (fromCommunitySongs.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
                     item(
                         key = "from_community_section",
                         contentType = "from_community_section"
                     ) {
                         HorizontalSongCarouselSection(
-                            title = "From Community",
-                            subtitle = "Trending hits & community favorites",
+                            title = "Trending Hits",
+                            subtitle = "Popular tracks on YouTube Music",
                             songs = fromCommunitySongs,
                             currentPlayingSongId = currentSong?.id,
                             isPlaying = isPlaying,
                             onSongClick = { song ->
-                                playerViewModel.showAndPlaySong(song, fromCommunitySongs, "From Community")
+                                playerViewModel.showAndPlaySong(song, fromCommunitySongs, "Trending Hits")
                             }
                         )
                     }
                 }
 
-                if (trendingCommunityPlaylists.isNotEmpty()) {
+                if (trendingCommunityPlaylists.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
                     item(
                         key = "trending_community_playlists_section",
                         contentType = "trending_community_playlists_section"
@@ -543,15 +647,15 @@ fun HomeScreen(
                     }
                 }
 
-                if (featuredPlaylists.isNotEmpty()) {
+                if (mixedForYouPlaylists.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
                     item(
-                        key = "featured_playlists_section",
-                        contentType = "featured_playlists_section"
+                        key = "mixed_for_you_section",
+                        contentType = "mixed_for_you_section"
                     ) {
                         HorizontalPlaylistCarouselSection(
-                            title = "Featured Playlists For You",
-                            subtitle = "Curated collections & top charts",
-                            playlists = featuredPlaylists,
+                            title = "Mixed For You",
+                            subtitle = "Personalized genre & mood mixes",
+                            playlists = mixedForYouPlaylists,
                             onPlaylistClick = { playlist ->
                                 navController.navigateSafely(Screen.PlaylistDetail.createRoute(playlist.id))
                             }
@@ -559,7 +663,7 @@ fun HomeScreen(
                     }
                 }
 
-                if (homeStatsOverview != null) {
+                if (homeStatsOverview != null && selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
                     item(
                         key = "listening_stats_preview",
                         contentType = "listening_stats_preview"

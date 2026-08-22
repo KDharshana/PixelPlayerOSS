@@ -1286,6 +1286,12 @@ class PlayerViewModel @Inject constructor(
     private val _mixedForYouPlaylists = MutableStateFlow<ImmutableList<com.lostf1sh.pixelplayeross.data.model.Playlist>>(persistentListOf())
     val mixedForYouPlaylists = _mixedForYouPlaylists.asStateFlow()
 
+    private val _newAlbums = MutableStateFlow<ImmutableList<com.lostf1sh.pixelplayeross.data.model.Album>>(persistentListOf())
+    val newAlbums = _newAlbums.asStateFlow()
+
+    private val _quickPicks = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
+    val quickPicks = _quickPicks.asStateFlow()
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val keepListeningSongs: StateFlow<ImmutableList<Song>> = playbackHistory
         .flatMapLatest { history ->
@@ -1312,6 +1318,12 @@ class PlayerViewModel @Inject constructor(
                 }
                 if (recs.mixedForYou.isNotEmpty()) {
                     _mixedForYouPlaylists.value = recs.mixedForYou.toImmutableList()
+                }
+                if (recs.newAlbums.isNotEmpty()) {
+                    _newAlbums.value = recs.newAlbums.toImmutableList()
+                }
+                if (recs.quickPicks.isNotEmpty()) {
+                    _quickPicks.value = recs.quickPicks.toImmutableList()
                 }
             } catch (e: Exception) {
                 Timber.tag("PlayerViewModel").e(e, "Error loading home recommendations")
@@ -2035,7 +2047,11 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val songsList: List<Song> = withContext(Dispatchers.IO) {
-                    musicRepository.getSongsForAlbum(album.id).first()
+                    if (album.id < 0) {
+                        youTubeRepository.getAlbumDetails(album.id)?.second ?: emptyList()
+                    } else {
+                        musicRepository.getSongsForAlbum(album.id).first()
+                    }
                 }
 
                 if (songsList.isNotEmpty()) {
@@ -2061,7 +2077,11 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val songsList: List<Song> = withContext(Dispatchers.IO) {
-                    musicRepository.getSongsForArtist(artist.id).first()
+                    if (artist.id < 0) {
+                        youTubeRepository.getArtistDetails(artist.id)?.second ?: emptyList()
+                    } else {
+                        musicRepository.getSongsForArtist(artist.id).first()
+                    }
                 }
 
                 if (songsList.isNotEmpty()) {

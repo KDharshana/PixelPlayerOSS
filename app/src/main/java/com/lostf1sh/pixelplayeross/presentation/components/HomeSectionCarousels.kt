@@ -40,6 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.rounded.Album
+import com.lostf1sh.pixelplayeross.data.model.Album
 import com.lostf1sh.pixelplayeross.data.model.Playlist
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.presentation.components.subcomps.PlayingEqIcon
@@ -319,3 +321,115 @@ fun HorizontalPlaylistCarouselSection(
         }
     }
 }
+
+@Composable
+fun HomeAlbumCard(
+    album: Album,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .width(156.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(136.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!album.albumArtUriString.isNullOrBlank()) {
+                    SmartImage(
+                        model = album.albumArtUriString,
+                        contentDescription = album.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Rounded.Album,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.35f)),
+                                startY = 80f
+                            )
+                        )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = album.title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = album.artist.ifBlank { "YouTube Music" },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+fun HorizontalAlbumCarouselSection(
+    title: String,
+    subtitle: String? = null,
+    albums: ImmutableList<Album>,
+    onAlbumClick: (Album) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (albums.isEmpty()) return
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        HomeSectionHeader(
+            title = title,
+            subtitle = subtitle
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            items(
+                items = albums,
+                key = { it.id }
+            ) { album ->
+                HomeAlbumCard(
+                    album = album,
+                    onClick = { onAlbumClick(album) }
+                )
+            }
+        }
+    }
+}
+

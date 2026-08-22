@@ -40,8 +40,24 @@ class InnertubeLiveNetworkTest {
             println("Stream format count: ${streamInfo?.formats?.size}")
         }
 
-        println("\n=== TESTING INNERTUBE BROWSE ===")
-        val sections = apiService.getBrowse()
-        println("Browse sections found: ${sections.size}")
+        println("\n=== TESTING INNERTUBE BROWSE (FEmusic_home) ===")
+        val sections = apiService.getBrowse("FEmusic_home")
+        println("FEmusic_home sections found: ${sections.size}")
+        sections.forEach { s -> println("  -> '${s.title}' (tracks=${s.tracks.size}, playlists=${s.playlists.size}, albums=${s.albums.size})") }
+
+        println("\n=== TESTING INNERTUBE BROWSE (FEmusic_charts) ===")
+        val chartSections = apiService.getBrowse("FEmusic_charts")
+        println("FEmusic_charts sections found: ${chartSections.size}")
+        chartSections.forEach { s ->
+            println("  -> '${s.title}' (tracks=${s.tracks.size}, playlists=${s.playlists.size}, albums=${s.albums.size})")
+            s.tracks.take(3).forEach { t -> println("     Track: ${t.title} - ${t.artist}") }
+        }
+
+        println("\n=== TESTING INNERTUBE BROWSE (FEmusic_explore) ===")
+        val exploreSections = apiService.getBrowse("FEmusic_explore")
+        println("FEmusic_explore sections found: ${exploreSections.size}")
+        exploreSections.forEach { s ->
+            println("  -> '${s.title}' (tracks=${s.tracks.size}, playlists=${s.playlists.size}, albums=${s.albums.size})")
+        }
     }
 }
