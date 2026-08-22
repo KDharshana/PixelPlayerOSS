@@ -221,3 +221,29 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+/**
+ * v7 -> v8: on-device item co-occurrence sparse graph table.
+ *
+ * Tracks pairwise adjacent play frequencies during listening sessions for
+ * personalized candidate generation.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+                CREATE TABLE IF NOT EXISTS `item_cooccurrences` (
+                    `song_id_a` TEXT NOT NULL,
+                    `song_id_b` TEXT NOT NULL,
+                    `cooccurrence_count` INTEGER NOT NULL DEFAULT 1,
+                    `last_updated_timestamp` INTEGER NOT NULL,
+                    PRIMARY KEY(`song_id_a`, `song_id_b`)
+                )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_item_cooccurrences_song_id_a` ON `item_cooccurrences` (`song_id_a`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_item_cooccurrences_song_id_b` ON `item_cooccurrences` (`song_id_b`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_item_cooccurrences_cooccurrence_count` ON `item_cooccurrences` (`cooccurrence_count`)")
+    }
+}
+
+

@@ -33,7 +33,8 @@ import timber.log.Timber
 class ListeningStatsTracker @Inject constructor(
     private val dailyMixManager: DailyMixManager,
     private val playbackStatsRepository: PlaybackStatsRepository,
-    private val scrobbleManager: ScrobbleManager
+    private val scrobbleManager: ScrobbleManager,
+    private val itemEmbeddingStore: com.lostf1sh.pixelplayeross.data.recommendation.ItemEmbeddingStore
 ) {
     private var currentSession: ActiveSession? = null
     private var pendingVoluntarySongId: String? = null
@@ -41,6 +42,7 @@ class ListeningStatsTracker @Inject constructor(
     private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val appSessionId = java.util.UUID.randomUUID().toString()
     private val sessionPlayedSongIds = mutableSetOf<String>()
+    private val recentSessionSongs = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val _playbackHistory = MutableStateFlow<List<PlaybackStatsRepository.PlaybackHistoryEntry>>(emptyList())
     val playbackHistory: StateFlow<List<PlaybackStatsRepository.PlaybackHistoryEntry>> = _playbackHistory.asStateFlow()
 
@@ -353,6 +355,15 @@ class ListeningStatsTracker @Inject constructor(
         }
         if (isRepeat) {
             dailyMixManager.recordSessionRepeat(songId = songId, sessionId = sessionId, timestamp = timestamp)
+        }
+        for (recentSong in recentSessionSongs.takeLast(3)) {
+            if (recentSong != songId) {
+                itemEmbeddingStore.recordPairwisePlay(recentSong, songId, timestamp)
+            }
+        }
+        recentSessionSongs.add(songId)
+        if (recentSessionSongs.size > 10) {
+            recentSessionSongs.removeAt(0)
         }
         playbackStatsRepository.recordPlayback(
             songId = songId,

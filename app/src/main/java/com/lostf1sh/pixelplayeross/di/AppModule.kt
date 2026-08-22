@@ -24,12 +24,14 @@ import com.lostf1sh.pixelplayeross.data.database.LyricsDao
 import com.lostf1sh.pixelplayeross.data.database.LocalPlaylistDao
 import com.lostf1sh.pixelplayeross.data.database.ListenBrainzDao
 import com.lostf1sh.pixelplayeross.data.database.AudioBookmarkDao
+import com.lostf1sh.pixelplayeross.data.database.ItemCooccurrenceDao
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_1_2
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_2_3
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_3_4
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_4_5
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_5_6
 import com.lostf1sh.pixelplayeross.data.database.MIGRATION_6_7
+import com.lostf1sh.pixelplayeross.data.database.MIGRATION_7_8
 import com.lostf1sh.pixelplayeross.data.database.YouTubeDao
 import com.lostf1sh.pixelplayeross.data.database.MusicDao
 import com.lostf1sh.pixelplayeross.data.database.OfflineTrackDao
@@ -135,7 +137,7 @@ object AppModule {
             "pixelplayer_database"
         )
             .addCallback(PixelPlayerDatabase.createRuntimeArtifactsCallback())
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
 
         if (BuildConfig.DEBUG) {
@@ -227,6 +229,12 @@ object AppModule {
     @Provides
     fun provideOfflineTrackDao(database: PixelPlayerDatabase): OfflineTrackDao {
         return database.offlineTrackDao()
+    }
+
+    @Singleton
+    @Provides
+    fun provideItemCooccurrenceDao(database: PixelPlayerDatabase): ItemCooccurrenceDao {
+        return database.itemCooccurrenceDao()
     }
 
     @Provides

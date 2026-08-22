@@ -27,9 +27,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AudioBookmarkEntity::class,
         OfflineTrackEntity::class,
         YouTubeSongEntity::class,
-        YouTubePlaylistEntity::class
+        YouTubePlaylistEntity::class,
+        ItemCooccurrenceEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class PixelPlayerDatabase : RoomDatabase() {
@@ -47,6 +48,7 @@ abstract class PixelPlayerDatabase : RoomDatabase() {
     abstract fun listenBrainzDao(): ListenBrainzDao
     abstract fun audioBookmarkDao(): AudioBookmarkDao
     abstract fun offlineTrackDao(): OfflineTrackDao
+    abstract fun itemCooccurrenceDao(): ItemCooccurrenceDao
 
     companion object {
         fun installFavoriteSyncTriggers(db: SupportSQLiteDatabase) {

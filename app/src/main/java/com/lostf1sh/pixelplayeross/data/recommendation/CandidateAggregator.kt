@@ -23,7 +23,8 @@ import javax.inject.Singleton
 class CandidateAggregator @Inject constructor(
     private val youTubeRepository: YouTubeRepository,
     private val listenBrainzRepository: ListenBrainzRepository,
-    private val musicRepository: MusicRepository
+    private val musicRepository: MusicRepository,
+    private val itemEmbeddingStore: ItemEmbeddingStore
 ) {
 
     companion object {
@@ -32,15 +33,15 @@ class CandidateAggregator @Inject constructor(
 
     suspend fun collect(
         seedSongs: List<Song>,
-        limit: Int = 100,
-        cooccurrenceCandidates: List<RecommendationCandidate> = emptyList()
+        limit: Int = 100
     ): List<RecommendationCandidate> = coroutineScope {
-        if (seedSongs.isEmpty() && cooccurrenceCandidates.isEmpty()) return@coroutineScope emptyList()
+        if (seedSongs.isEmpty()) return@coroutineScope emptyList()
 
         val topSeeds = seedSongs.take(5)
         val ytDeferred = async { collectYouTubeRadioCandidates(topSeeds) }
         val lbDeferred = async { collectListenBrainzCandidates(topSeeds) }
         val genreDeferred = async { collectGenreCandidates(topSeeds) }
+        val cooccurDeferred = async { collectCooccurrenceCandidates(topSeeds) }
 
         val ytCandidates = runCatching { ytDeferred.await() }
             .onFailure { Timber.tag(TAG).w(it, "YouTube candidate collection failed") }
@@ -54,8 +55,35 @@ class CandidateAggregator @Inject constructor(
             .onFailure { Timber.tag(TAG).w(it, "Genre candidate collection failed") }
             .getOrDefault(emptyList())
 
-        val allCandidates = cooccurrenceCandidates + ytCandidates + lbCandidates + genreCandidates
+        val cooccurCandidates = runCatching { cooccurDeferred.await() }
+            .onFailure { Timber.tag(TAG).w(it, "Cooccurrence candidate collection failed") }
+            .getOrDefault(emptyList())
+
+        val allCandidates = cooccurCandidates + ytCandidates + lbCandidates + genreCandidates
         deduplicateCandidates(allCandidates).take(limit)
+    }
+
+    private suspend fun collectCooccurrenceCandidates(seeds: List<Song>): List<RecommendationCandidate> {
+        val results = mutableListOf<RecommendationCandidate>()
+        for (seed in seeds.take(5)) {
+            val similar = itemEmbeddingStore.getSimilarSongs(seed.id, limit = 5)
+            if (similar.isNotEmpty()) {
+                val neighborIds = similar.map { it.first }
+                val neighborSongs = musicRepository.getSongsByIds(neighborIds)
+                val scoreMap = similar.toMap()
+                neighborSongs.forEach { song ->
+                    results.add(
+                        RecommendationCandidate(
+                            song = song,
+                            sourceType = CandidateSourceType.LIBRARY_COOCCURRENCE,
+                            sourceStrength = scoreMap[song.id] ?: 0.75,
+                            seedSongId = seed.id
+                        )
+                    )
+                }
+            }
+        }
+        return results
     }
 
     private suspend fun collectYouTubeRadioCandidates(seeds: List<Song>): List<RecommendationCandidate> {

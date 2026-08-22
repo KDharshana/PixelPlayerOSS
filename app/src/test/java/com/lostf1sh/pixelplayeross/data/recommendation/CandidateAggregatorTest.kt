@@ -32,7 +32,8 @@ class CandidateAggregatorTest {
         val aggregator = CandidateAggregator(
             youTubeRepository = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository::class.java),
             listenBrainzRepository = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzRepository::class.java),
-            musicRepository = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.repository.MusicRepository::class.java)
+            musicRepository = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.repository.MusicRepository::class.java),
+            itemEmbeddingStore = org.mockito.Mockito.mock(com.lostf1sh.pixelplayeross.data.recommendation.ItemEmbeddingStore::class.java)
         )
 
         val deduplicated = aggregator.deduplicateCandidates(listOf(candidateLow, candidateHigh))
