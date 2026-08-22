@@ -1,205 +1,259 @@
 
+# PixelPlayerOSS
+
 <p align="center">
-  <img src="assets/pixelplayeross_header.png" alt="PixelPlayerOSS — open-source music player for Android"/>
+  <img src="assets/pixelplayeross_header.png" alt="PixelPlayerOSS Header" width="100%"/>
 </p>
 
 <p align="center">
-  <a href="https://github.com/PixelPlayerHQ/PixelPlayerOSS/releases/latest">
-    <img src="https://img.shields.io/github/v/release/PixelPlayerHQ/PixelPlayerOSS?include_prereleases&logo=github&style=for-the-badge&label=Latest%20Release" alt="Latest release">
+  <a href="https://github.com/KDharshana/PixelPlayerOSS/releases/latest">
+    <img src="https://img.shields.io/github/v/release/KDharshana/PixelPlayerOSS?include_prereleases&logo=github&style=for-the-badge&label=Latest%20Release" alt="Latest Release">
   </a>
   <a href="https://f-droid.org/packages/com.lostf1sh.pixelplayeross/">
-    <img src="https://img.shields.io/f-droid/v/com.lostf1sh.pixelplayeross?logo=fdroid&style=for-the-badge&label=F-Droid" alt="F-Droid version">
-  </a>
-  <a href="https://github.com/PixelPlayerHQ/PixelPlayerOSS/releases">
-    <img src="https://img.shields.io/github/downloads/PixelPlayerHQ/PixelPlayerOSS/total?logo=github&style=for-the-badge" alt="Total downloads">
-  </a>
-  <a href="https://github.com/sponsors/lostf1sh">
-    <img src="https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub Sponsors">
+    <img src="https://img.shields.io/f-droid/v/com.lostf1sh.pixelplayeross?logo=fdroid&style=for-the-badge&label=F-Droid" alt="F-Droid Version">
   </a>
   <a href="https://github.com/dharshan-X">
     <img src="https://img.shields.io/badge/Maintained%20by-dharshan--X-007ACC?style=for-the-badge&logo=github&logoColor=white" alt="Maintained by dharshan-X">
   </a>
-  <img src="https://img.shields.io/badge/Android-11%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 11+">
-  <img src="https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge" alt="GPLv3 license">
+  <img src="https://img.shields.io/badge/Android-11%2B%20(API%2030%2B)-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 11+">
+  <img src="https://img.shields.io/badge/Kotlin-2.4-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin 2.4">
+  <img src="https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge" alt="GPLv3 License">
 </p>
 
 <p align="center">
-  <img src="assets/screenshot1.jpeg" alt="PixelPlayerOSS home screen" width="205"/>
-  <img src="assets/screenshot2.jpeg" alt="PixelPlayerOSS now playing screen" width="205"/>
-  <img src="assets/screenshot3.jpeg" alt="PixelPlayerOSS library screen" width="205"/>
-  <img src="assets/screenshot4.jpeg" alt="PixelPlayerOSS lyrics screen" width="205"/>
+  <img src="assets/screenshot1.jpeg" alt="Home Screen" width="205"/>
+  <img src="assets/screenshot2.jpeg" alt="Now Playing Screen" width="205"/>
+  <img src="assets/screenshot3.jpeg" alt="Library Screen" width="205"/>
+  <img src="assets/screenshot4.jpeg" alt="Lyrics Screen" width="205"/>
 </p>
 
-## What It Is
+---
 
-PixelPlayerOSS is an open-source Android music player focused on local playback, self-hosted streaming, client-side YouTube Music discovery, expressive Material 3 UI, and privacy-respecting online lookups.
+## Executive Overview
 
-The app is fully functional offline by default. All online integrations (streaming, metadata, lyrics, scrobbling) are modular, client-side, and user-configurable.
+PixelPlayerOSS is an advanced Android audio player and streaming client engineered with Jetpack Compose and Material 3 Expressive principles. It unifies local high-resolution audio file playback, self-hosted media server streaming (Navidrome, Jellyfin), and client-side YouTube Music discovery into a singular, high-performance audio environment.
 
-Package name: `com.lostf1sh.pixelplayeross`
+The project is designed with strict privacy and performance standards:
+- Zero proprietary tracking libraries (no Firebase, Crashlytics, or Google Analytics).
+- No Google Play Services runtime dependencies.
+- Client-side streaming resolution executing directly on-device without intermediary proxy servers.
+- Full offline capability by default, with modular, opt-in online extensions.
 
-## Why This Exists
+- **Package Identifier**: `com.lostf1sh.pixelplayeross`
+- **Minimum SDK**: Android 11 (API Level 30)
+- **Target SDK**: Android 15 (API Level 35) / Compile SDK 37
+- **License**: GNU General Public License v3.0
 
-PixelPlayerOSS keeps the player strictly FOSS-oriented and private:
+---
 
-- **No Proprietary Trackers**: Stripped of Firebase, Crashlytics, Google Play Services runtime dependencies, Google Drive, Gemini, and Play Store billing.
-- **Client-Side & Standalone**: Streaming and metadata extraction run directly on-device without relying on centralized or privacy-compromising intermediary proxy servers.
-- **Unified Audio Experience**: Seamlessly integrates local device storage, self-hosted media servers (Navidrome, Jellyfin), and YouTube Music into a single unified queue, playlist engine, and UI.
+## Architecture and Core Subsystems
 
-## Features
+### 1. DualPlayerEngine and Playback Pipeline
+- **Engine Core**: Dual-instance playback engine built on AndroidX Media3 and ExoPlayer, routing playback through a dedicated background `MusicService`.
+- **Transitions and Crossfade**: True gapless playback, customizable crossfade durations, and non-linear audio transition curves.
+- **Resilience and Offload**: Dynamic audio offload stall detection and automated decoder recovery, intelligent pre-buffering, and transient audio focus management.
+- **Audio Tuning**: Integrated ReplayGain track and album gain normalization, 10-band equalizer support, pitch/tempo adjustment, and sleep timer scheduling.
 
-| Area | Highlights |
-| --- | --- |
-| **Playback Engine** | Custom `DualPlayerEngine` powered by AndroidX Media3 & ExoPlayer, gapless playback, customizable crossfade, transition curves, audio offload stall recovery, hardware decoder optimization, smart queue, and sleep timer. |
-| **Search & Discovery** | High-performance FTS4 SQLite local search combined with progressive online YouTube Music search, unified infinite scrolling, live filter chips (Songs, Albums, Artists, Playlists), and persistent search history. |
-| **Streaming & Cloud** | Client-side YouTube Music (Innertube engine, continuous radio mix feeds, 1024px Ultra-HD artwork), self-hosted Navidrome/Subsonic & Jellyfin sync/streaming, and ListenBrainz real-time scrobbling. |
-| **Unified Library** | Single cohesive library for Local, Cloud, and YouTube Music songs, albums, artists, genres, playlists, and favorites/likes with quick source filtering (`Unified`, `Local`, `YouTube Music`). |
-| **Offline & Caching** | Dedicated offline download manager (`CloudOfflineRepository`), persistent stream metadata caching, and automated pre-buffering for gapless streaming. |
-| **Lyrics** | Embedded tags, local `.lrc` files, synchronized YouTube Music transcript lyrics, LRCLIB online time-synced lyrics lookup, and interactive lyrics viewer/editor. |
-| **Artwork & Visuals** | Ultra-HD 1024px album artwork upscaler, Material You dynamic color palette extraction, customizable UI themes, and glanceable Home Screen widgets. |
-| **Backup & Metadata** | Complete export/import for preferences, playlists, favorites, lyrics, and play statistics; on-demand MusicBrainz metadata enrichment and TagLib audio tag editing. |
+### 2. Client-Side YouTube Music Integration
+- **Direct Innertube Engine**: Embedded pure-Kotlin extractor querying YouTube Music internal endpoints directly on-device without third-party scraping infrastructure.
+- **Stream Proxy and Expiry Management**: In-memory proxy (`YouTubeStreamProxy`) with dynamic token expiration parsing (`&expire=`), upstream HTTP 401/403/404/410 error recovery, and seamless HTTP byte-range forwarding.
+- **Discovery Surfaces**: Algorithmic Quick Picks, dynamic continuous radio mixes, new releases, mood and genre carousels, and multi-artist exploration.
+- **High-Resolution Artwork**: Automated thumbnail pipeline upscaling artwork to 1024px Ultra-HD resolution.
 
-## Online Services
+### 3. Self-Hosted Cloud Streaming and Scrobbling
+- **Navidrome and Subsonic API**: Compatibility with Subsonic-compliant endpoints for remote library synchronization, artist/album navigation, server-side search, and on-demand streaming.
+- **Jellyfin Integration**: Native REST API client supporting token authentication, collection browsing, and direct media streaming.
+- **ListenBrainz Scrobbling**: Real-time playback scrobbling, now-playing presence updates, and offline scrobble persistence with background WorkManager synchronization.
 
-PixelPlayerOSS separates offline playback from network lookups.
+### 4. Unified Library and Hybrid Playlists
+- **Full-Text Search (FTS4)**: Room SQLite database with virtual FTS4 tables indexing local files, cloud items, and YouTube Music tracks concurrently.
+- **Source Filtering**: Single-tap switching between Unified, Local Only, and YouTube Music library modes.
+- **Hybrid Playlists**: Full support for mixed playlists containing any combination of local audio files, Navidrome tracks, Jellyfin streams, and YouTube Music items.
+- **Multi-Artist Parsing**: Relational indexing for collaborative artist tracks with individual artist navigation and metadata normalization.
 
-| Service | Purpose | Default |
-| --- | --- | --- |
-| **YouTube Music (Innertube)** | Client-side online search, song streaming, radio queues, artist/album exploration, and 1024px HD artwork | Enabled (No account required) |
-| **Navidrome / Subsonic** | Self-hosted library synchronization, streaming, and offline track downloads | User login required |
-| **Jellyfin** | Self-hosted server streaming, library sync, and offline downloads | User login required |
-| **ListenBrainz** | Real-time playback scrobbling and listening history tracking | User token required |
-| **LRCLIB** | Online synchronized lyrics lookup when local or embedded lyrics are missing | Off (Opt-in) |
-| **MusicBrainz** | On-demand metadata matching and track/artist identifier enrichment | On-demand |
-| **Deezer** | Fetch missing artist artwork and cache it locally | Off (Opt-in) |
+### 5. Bundled Offline Download Manager
+- **Complete Download Pipeline**: Background WorkManager download coordinator capturing remote audio streams, companion high-resolution cover art (`.jpg`), and companion synchronized lyrics (`.lrc`).
+- **TagLib Native Tagging**: Directly embeds Title, Artist, Album, Cover Artwork picture bytes, and Synchronized LRC text into downloaded audio files using TagLib.
+- **Zero-Network Interception**: ExoPlayer automatically detects downloaded local copies when playing tracks from any screen, routing directly to local storage without network requests.
+- **Dedicated Offline Hub**: Downloads screen with storage management and instant one-tap playback on completed items.
 
-Optional services can be toggled during first-run setup or from `Settings > Music Management > Optional online services`.
+### 6. Lyrics Subsystem
+- **Multi-Source Engine**: Priority fallback across embedded TagLib tags, local `.lrc` companion files, YouTube Music synchronized transcript feeds, and LRCLIB cloud queries.
+- **Interactive Lyrics UI**: Synchronized line-by-line scrolling, word-level highlight animations, romanization engines (Japanese, Korean, Devanagari, Gurmukhi, Cyrillic), and embedded lyrics editing.
 
-## Requirements
+### 7. Modern UI and Material 3 Expressive Design
+- **Dynamic Theming**: Color extraction using Material You dynamic palettes from active track artwork.
+- **App Widgets**: Glance-based responsive home screen widgets with playback controls and real-time state synchronization.
+- **Expressive Navigation**: Fluid transitions, bottom sheet player presentation, and ergonomic one-handed layout design.
 
-| Requirement | Version |
-| --- | --- |
-| Android | 11 or newer (API 30+) |
-| JDK | 21 |
-| Android SDK | compile/target 37 |
+---
 
-## Build From Source
+## Modular Online Services Reference
+
+| Service | Protocol / Source | Purpose | Authentication | Default State |
+| :--- | :--- | :--- | :--- | :--- |
+| **YouTube Music** | Innertube Client (Kotlin) | Online search, streaming, radio queues, artist discovery, and 1024px art | None required | Enabled |
+| **Navidrome / Subsonic** | Subsonic REST API | Library synchronization, remote streaming, and offline downloads | Server credentials | Disabled (Opt-in) |
+| **Jellyfin** | Jellyfin REST API | Server media streaming, library browsing, and offline downloads | Server credentials | Disabled (Opt-in) |
+| **ListenBrainz** | ListenBrainz API | Real-time playback scrobbling and listening history tracking | User API token | Disabled (Opt-in) |
+| **LRCLIB** | LRCLIB REST API | Synchronized and plain text lyrics retrieval fallback | None | Disabled (Opt-in) |
+| **MusicBrainz** | MusicBrainz XML/JSON | On-demand metadata enrichment and artist identifier verification | None | On-demand |
+| **Deezer** | Deezer Public API | Artist picture retrieval for local audio files | None | Disabled (Opt-in) |
+
+---
+
+## Supported Codecs and Containers
+
+| Format / Codec | Extension | Local Playback | Cloud Streaming | Offline Download | Metadata Tagging |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **FLAC** | `.flac` | Supported (Hi-Res) | Supported | Supported | Supported (TagLib) |
+| **Opus** | `.opus`, `.ogg` | Supported | Supported (YouTube/WebM) | Supported | Supported (TagLib) |
+| **AAC / M4A** | `.m4a`, `.aac` | Supported | Supported | Supported | Supported (TagLib) |
+| **MP3** | `.mp3` | Supported | Supported | Supported | Supported (TagLib) |
+| **Ogg Vorbis** | `.ogg` | Supported | Supported | Supported | Supported (TagLib) |
+| **WAV** | `.wav` | Supported (PCM) | Supported | Supported | Supported (TagLib) |
+| **WebM Audio** | `.webm` | Supported | Supported (YouTube) | Supported | Supported (TagLib) |
+
+---
+
+## Technical Stack
+
+| Layer | Technologies and Libraries |
+| :--- | :--- |
+| **Language and Runtime** | Kotlin 2.4, Kotlin Coroutines, StateFlow, Java 21 |
+| **UI Framework** | Jetpack Compose, Compose Foundation, Material 3 Expressive, Navigation Compose |
+| **Audio and Media Engine** | AndroidX Media3 (ExoPlayer, Session, UI, Decoder), Custom DualPlayerEngine |
+| **Database and Persistence** | Room SQLite 2.7+ with FTS4 Virtual Tables, Jetpack DataStore Preferences |
+| **Dependency Injection** | Dagger Hilt 2.55+ |
+| **Background Processing** | AndroidX WorkManager with Hilt Assisted Injection |
+| **Networking and Serialization** | OkHttp 4, Retrofit 2, Kotlinx Serialization, Gson |
+| **Native Tagging** | TagLib (C++ bindings via JNI) |
+| **Image Pipeline** | Coil 3 |
+| **Home Widgets** | AndroidX Glance |
+| **Logging and Diagnostics** | Timber, Custom Audio Diagnostic Pipeline |
+
+---
+
+## Project Layout
+
+```
+PixelPlayerOSS/
+├── app/
+│   ├── schemas/                          # Versioned Room DB JSON schemas
+│   └── src/
+│       ├── androidTest/                  # Instrumentation and database migration tests
+│       ├── main/
+│       │   ├── java/com/lostf1sh/pixelplayeross/
+│       │   │   ├── data/
+│       │   │   │   ├── backup/           # JSON backup and restore modules
+│       │   │   │   ├── database/         # Room Database, DAOs, Entities, Migrations
+│       │   │   │   ├── jellyfin/         # Jellyfin API client and repository
+│       │   │   │   ├── media/            # Audio metadata reader, editor, ReplayGain
+│       │   │   │   ├── model/            # Core domain models (Song, Album, Artist, Lyrics)
+│       │   │   │   ├── navidrome/        # Subsonic API client and repository
+│       │   │   │   ├── network/          # HTTP clients, Innertube parser, LRCLIB, ListenBrainz
+│       │   │   │   ├── offline/          # CloudOfflineRepository and download coordinator
+│       │   │   │   ├── preferences/      # DataStore preference repositories
+│       │   │   │   ├── repository/       # Music, Search, Lyrics, and Artist repositories
+│       │   │   │   ├── service/          # Media3 MusicService, DualPlayerEngine, audio processors
+│       │   │   │   ├── stream/           # Local authenticated proxy and security validators
+│       │   │   │   ├── worker/           # Background download and sync WorkManager workers
+│       │   │   │   └── youtube/          # YouTube repository, stream proxy, and radio feeds
+│       │   │   ├── di/                   # Dagger Hilt modules
+│       │   │   ├── presentation/         # Compose UI screens, dialogs, navigation, ViewModels
+│       │   │   ├── ui/                   # Theme, dynamic colors, typography, Glance widgets
+│       │   │   └── utils/                # Audio format utilities, lyrics formatters, security checks
+│       │   └── res/                      # Android resources, vector drawables, layouts, localized strings
+│       └── test/                         # Unit tests (parsers, viewmodels, engines)
+├── baselineprofile/                      # Macrobenchmark baseline profile generators
+├── docs/                                 # Architectural Decision Records (ADRs) and release documentation
+├── gradle/                               # Gradle wrapper and build configuration scripts
+└── fastlane/                             # Fastlane metadata and automated distribution configuration
+```
+
+---
+
+## Building and Development
+
+### Environment Requirements
+- **JDK**: Java Development Kit 21
+- **Android SDK**: Build tools 35.0.0+, Platform SDK 37 (API 30+ minimum)
+- **Gradle**: 9.x+ (managed via `./gradlew`)
+
+### Build Commands
 
 Clone the repository:
-
 ```sh
-git clone https://github.com/PixelPlayerHQ/PixelPlayerOSS.git
+git clone https://github.com/KDharshana/PixelPlayerOSS.git
 cd PixelPlayerOSS
 ```
 
-Build the debug APK:
-
+Assemble Debug APK:
 ```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:assembleDebug
+./gradlew :app:assembleDebug
 ```
 
-Build one universal debug APK for local installation:
-
+Assemble Universal Debug APK (single binary without ABI splits):
 ```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:assembleDebug -Ppixelplayer.enableAbiSplits=false
+./gradlew :app:assembleDebug -Ppixelplayer.enableAbiSplits=false
 ```
 
-Build a signed/unsigned release APK:
-
+Assemble Signed Release APKs:
 ```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:assembleRelease
+./gradlew :app:assembleRelease
 ```
 
-Run unit tests:
-
+Execute Unit Test Suite:
 ```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:testDebugUnitTest
+./gradlew :app:testDebugUnitTest
 ```
 
-Generate baseline profiles with a connected device or emulator:
-
+Run Android Lint Analysis:
 ```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :baselineprofile:generateBaselineProfile
+./gradlew :app:lintDebug
 ```
 
-## Download
-
-PixelPlayerOSS is available on F-Droid:
-
-<a href="https://f-droid.org/packages/com.lostf1sh.pixelplayeross/">
-  <img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="80">
-</a>
-
-GitHub releases are available at:
-
-```text
-https://github.com/PixelPlayerHQ/PixelPlayerOSS/releases
-```
-
-Obtainium app ID:
-
-```text
-com.lostf1sh.pixelplayeross
-```
-
-Public releases are published on a regular cadence when `main` passes all release checks.
-
-### Alpha builds
-
-Every merge into `main` automatically publishes a pre-release tagged like `v0.3.0-alpha.N` on the [releases page](https://github.com/PixelPlayerHQ/PixelPlayerOSS/releases).
-
-- `arm64-v8a`: Fits modern 64-bit devices.
-- `armeabi-v7a`: For older 32-bit devices.
-
-## Tech Stack
-
-| Area | Technology |
-| --- | --- |
-| **Language** | Kotlin 2.4 |
-| **UI & Design** | Jetpack Compose, Material 3 Expressive, Glance App Widgets |
-| **Playback** | AndroidX Media3, ExoPlayer, custom `DualPlayerEngine` |
-| **Database** | Room SQLite with FTS4 Full-Text Search |
-| **Dependency Injection** | Dagger Hilt |
-| **Preferences** | Jetpack DataStore |
-| **Background Work** | WorkManager |
-| **Networking** | Retrofit 2, OkHttp 4, pure-Kotlin Innertube extractor |
-| **Image Loading** | Coil 3 |
-| **Audio Metadata** | TagLib |
-
-## Project Structure
-
-```text
-app/src/main/java/com/lostf1sh/pixelplayeross/
-├── data/             # Room DB (FTS4), repositories, preferences, services, workers, Innertube
-├── di/               # Dagger Hilt modules and dependency providers
-├── presentation/     # Jetpack Compose screens, components, navigation, ViewModels, state holders
-├── ui/               # Material 3 Theme, dynamic color palettes, Glance home widgets
-└── utils/            # Formats, audio envelopes, helpers, extensions
-
-baselineprofile/      # Macrobenchmarks and baseline profile generators
-```
-
-## Contributing
-
-Contributions are welcome! Open an issue or pull request with focused changes and include test/build verification results.
-
-Useful local checks:
-
+Generate Baseline Profiles (requires connected device or emulator):
 ```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:compileDebugKotlin
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:lintDebug
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:testDebugUnitTest
+./gradlew :baselineprofile:generateBaselineProfile
 ```
 
-Release process: [docs/RELEASE.md](docs/RELEASE.md) | F-Droid notes: [docs/FDROID.md](docs/FDROID.md) | Privacy policy: [PRIVACY.md](PRIVACY.md) | Security policy: [SECURITY.md](SECURITY.md)
+---
 
-## License
+## Distribution and Downloads
 
-PixelPlayerOSS is licensed under the [GNU General Public License v3.0](LICENSE) (`SPDX-License-Identifier: GPL-3.0-or-later`).
+### Release Channels
+- **F-Droid**: Available in the official F-Droid catalog:
+  - Package: `com.lostf1sh.pixelplayeross`
+- **GitHub Releases**: Download pre-compiled signed APK binaries from the [Releases Page](https://github.com/KDharshana/PixelPlayerOSS/releases).
+- **Obtainium**: Configure Obtainium with the repository URL: `https://github.com/KDharshana/PixelPlayerOSS`.
+
+### Architecture Packages
+- **`arm64-v8a`**: Optimized for modern 64-bit ARM Android devices.
+- **`armeabi-v7a`**: Compatible with legacy 32-bit ARM devices.
+- **Universal**: Contains all native binaries in a single package.
+
+---
+
+## Contributing and Guidelines
+
+Contributions are welcome. Please ensure that:
+1. Code follows the architectural conventions documented in `AGENTS.md` and `docs/`.
+2. All playback modifications route through `MusicService` / `MediaController` rather than direct player manipulation.
+3. Database schema modifications include an incremental migration in `data/database/Migrations.kt` and an exported schema JSON in `app/schemas/`.
+4. All unit tests pass cleanly before submitting PRs: `./gradlew testDebugUnitTest`.
+
+Refer to [CONTRIBUTING.md](CONTRIBUTING.md) for pull request guidelines and [SECURITY.md](SECURITY.md) for security reporting protocols.
+
+---
+
+## License and Attribution
+
+PixelPlayerOSS is licensed under the terms of the **GNU General Public License v3.0** (`SPDX-License-Identifier: GPL-3.0-or-later`).
 
 ```text
 PixelPlayerOSS
-Copyright (C) 2026 Theo Vilardo
+Copyright (C) 2026 Theo Vilardo and Contributors
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -215,8 +269,9 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ```
 
-Distributed APKs include third-party components under their own licenses. In particular, the optional FFmpeg decoder dependency `org.jellyfin.media3:media3-ffmpeg-decoder` is GPL-3.0; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Third-party dependencies and licensing notices are detailed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 <p align="center">
   Maintained by <a href="https://github.com/dharshan-X">dharshan-X</a>
 </p>
+
