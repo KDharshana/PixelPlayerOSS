@@ -6,6 +6,7 @@ import com.lostf1sh.pixelplayeross.data.database.EngagementDao
 import com.lostf1sh.pixelplayeross.data.database.MusicDao
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeBrowseSection
+import com.lostf1sh.pixelplayeross.data.recommendation.AdaptiveWeightTuner
 import com.lostf1sh.pixelplayeross.data.recommendation.CandidateAggregator
 import com.lostf1sh.pixelplayeross.data.recommendation.PersonalizedRanker
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
@@ -34,6 +35,7 @@ class YouTubeDashboardViewModel @Inject constructor(
     private val youTubeRepository: YouTubeRepository,
     private val candidateAggregator: CandidateAggregator,
     private val personalizedRanker: PersonalizedRanker,
+    private val adaptiveWeightTuner: AdaptiveWeightTuner,
     private val engagementDao: EngagementDao,
     private val musicDao: MusicDao
 ) : ViewModel() {
@@ -87,7 +89,13 @@ class YouTubeDashboardViewModel @Inject constructor(
                                     val seedSongs = musicDao.getSongsByIds(seedIds)
                                     val candidates = candidateAggregator.collect(seedSongs, limit = 60)
                                     val engagementsMap = allEngagements.associateBy { it.songId }
-                                    val ranked = personalizedRanker.rank(candidates, engagementsMap, emptySet())
+                                    val tunedWeights = adaptiveWeightTuner.computeTunedWeights(allEngagements)
+                                    val ranked = personalizedRanker.rank(
+                                        candidates = candidates,
+                                        engagements = engagementsMap,
+                                        favoriteSongIds = emptySet(),
+                                        weights = tunedWeights
+                                    )
                                     val selected = personalizedRanker.pickWithDiversity(ranked, emptySet(), limit = 20)
                                     if (selected.isNotEmpty()) selected else charts.take(20)
                                 }
