@@ -39,6 +39,8 @@ class ListeningStatsTracker @Inject constructor(
     private var pendingVoluntarySongId: String? = null
     private var scope: CoroutineScope? = null
     private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val appSessionId = java.util.UUID.randomUUID().toString()
+    private val sessionPlayedSongIds = mutableSetOf<String>()
     private val _playbackHistory = MutableStateFlow<List<PlaybackStatsRepository.PlaybackHistoryEntry>>(emptyList())
     val playbackHistory: StateFlow<List<PlaybackStatsRepository.PlaybackHistoryEntry>> = _playbackHistory.asStateFlow()
 
@@ -245,6 +247,11 @@ class ListeningStatsTracker @Inject constructor(
             listenedMs = listened,
             trackDurationMs = session.totalDurationMs
         )
+        val isCompletion = session.totalDurationMs > 0L && listened >= (session.totalDurationMs * 0.90)
+        val isSkip = listened < 30_000L && session.totalDurationMs >= 30_000L
+        val isRepeat = sessionPlayedSongIds.contains(session.songId)
+        sessionPlayedSongIds.add(session.songId)
+
         if (listened >= MIN_SESSION_LISTEN_MS) {
             val rawEndTimestamp = when {
                 session.isPlaying -> nowEpoch
@@ -266,8 +273,18 @@ class ListeningStatsTracker @Inject constructor(
                 songId = songId,
                 listened = listened,
                 timestamp = timestamp,
+                isCompletion = isCompletion,
+                isSkip = isSkip,
+                isRepeat = isRepeat,
+                sessionId = appSessionId,
                 forceSynchronous = forceSynchronousPersistence
             )
+        } else if (isSkip) {
+            // Very early skip (< 5s)
+            val songId = session.songId
+            persistenceScope.launch {
+                runCatching { dailyMixManager.recordSkip(songId, nowEpoch) }
+            }
         }
         currentSession = null
         if (pendingVoluntarySongId == session.songId) {
@@ -291,23 +308,52 @@ class ListeningStatsTracker @Inject constructor(
         songId: String,
         listened: Long,
         timestamp: Long,
+        isCompletion: Boolean,
+        isSkip: Boolean,
+        isRepeat: Boolean,
+        sessionId: String,
         forceSynchronous: Boolean
     ) {
         persistenceScope.launch {
             runCatching {
-                persistPlaybackInternal(songId = songId, listened = listened, timestamp = timestamp)
+                persistPlaybackInternal(
+                    songId = songId,
+                    listened = listened,
+                    timestamp = timestamp,
+                    isCompletion = isCompletion,
+                    isSkip = isSkip,
+                    isRepeat = isRepeat,
+                    sessionId = sessionId
+                )
             }.onFailure { throwable ->
                 Timber.e(throwable, "Failed to persist listening session for song=%s", songId)
             }
         }
     }
 
-    private suspend fun persistPlaybackInternal(songId: String, listened: Long, timestamp: Long) {
+    private suspend fun persistPlaybackInternal(
+        songId: String,
+        listened: Long,
+        timestamp: Long,
+        isCompletion: Boolean,
+        isSkip: Boolean,
+        isRepeat: Boolean,
+        sessionId: String
+    ) {
         dailyMixManager.recordPlay(
             songId = songId,
             songDurationMs = listened,
             timestamp = timestamp
         )
+        if (isCompletion) {
+            dailyMixManager.recordCompletion(songId = songId, timestamp = timestamp)
+        }
+        if (isSkip) {
+            dailyMixManager.recordSkip(songId = songId, timestamp = timestamp)
+        }
+        if (isRepeat) {
+            dailyMixManager.recordSessionRepeat(songId = songId, sessionId = sessionId, timestamp = timestamp)
+        }
         playbackStatsRepository.recordPlayback(
             songId = songId,
             durationMs = listened,

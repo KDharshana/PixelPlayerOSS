@@ -248,6 +248,38 @@ class DailyMixManager @Inject constructor(
         )
     }
 
+    suspend fun recordSkip(
+        songId: String,
+        timestamp: Long = System.currentTimeMillis()
+    ) {
+        engagementDao.recordSkip(
+            songId = songId,
+            timestamp = timestamp.coerceAtLeast(0L)
+        )
+    }
+
+    suspend fun recordCompletion(
+        songId: String,
+        timestamp: Long = System.currentTimeMillis()
+    ) {
+        engagementDao.recordCompletion(
+            songId = songId,
+            timestamp = timestamp.coerceAtLeast(0L)
+        )
+    }
+
+    suspend fun recordSessionRepeat(
+        songId: String,
+        sessionId: String,
+        timestamp: Long = System.currentTimeMillis()
+    ) {
+        engagementDao.recordSessionRepeat(
+            songId = songId,
+            sessionId = sessionId,
+            timestamp = timestamp.coerceAtLeast(0L)
+        )
+    }
+
     suspend fun incrementScore(songId: String) {
         recordPlay(songId)
     }

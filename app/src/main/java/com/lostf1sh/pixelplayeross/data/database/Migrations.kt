@@ -203,3 +203,21 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/**
+ * v6 -> v7: rich implicit-feedback tracking for personalized recommendation engine.
+ *
+ * Adds columns to `song_engagements`:
+ * - `skip_before_30s_count`: tracks songs skipped before 30s as a negative penalty signal.
+ * - `completion_count`: tracks songs played >= 90% as a positive completion boost.
+ * - `session_repeat_count`: tracks repeated listens within the same playback session.
+ * - `last_session_id`: active session identifier at the time of last engagement.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.addColumnIfMissing("song_engagements", "skip_before_30s_count", "`skip_before_30s_count` INTEGER NOT NULL DEFAULT 0")
+        db.addColumnIfMissing("song_engagements", "completion_count", "`completion_count` INTEGER NOT NULL DEFAULT 0")
+        db.addColumnIfMissing("song_engagements", "session_repeat_count", "`session_repeat_count` INTEGER NOT NULL DEFAULT 0")
+        db.addColumnIfMissing("song_engagements", "last_session_id", "`last_session_id` TEXT")
+    }
+}
+

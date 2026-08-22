@@ -29,7 +29,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         YouTubeSongEntity::class,
         YouTubePlaylistEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class PixelPlayerDatabase : RoomDatabase() {

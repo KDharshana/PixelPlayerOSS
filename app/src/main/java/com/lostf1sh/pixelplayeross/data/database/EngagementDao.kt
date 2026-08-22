@@ -56,6 +56,43 @@ interface EngagementDao {
     suspend fun recordPlay(songId: String, durationMs: Long, timestamp: Long)
 
     /**
+     * Increments skip before 30s count and updates last played timestamp atomically.
+     */
+    @Query("""
+        INSERT INTO song_engagements (song_id, play_count, total_play_duration_ms, last_played_timestamp, skip_before_30s_count, completion_count, session_repeat_count, last_session_id)
+        VALUES (:songId, 0, 0, :timestamp, 1, 0, 0, NULL)
+        ON CONFLICT(song_id) DO UPDATE SET
+            skip_before_30s_count = skip_before_30s_count + 1,
+            last_played_timestamp = :timestamp
+    """)
+    suspend fun recordSkip(songId: String, timestamp: Long)
+
+    /**
+     * Increments completion count and updates last played timestamp atomically.
+     */
+    @Query("""
+        INSERT INTO song_engagements (song_id, play_count, total_play_duration_ms, last_played_timestamp, skip_before_30s_count, completion_count, session_repeat_count, last_session_id)
+        VALUES (:songId, 0, 0, :timestamp, 0, 1, 0, NULL)
+        ON CONFLICT(song_id) DO UPDATE SET
+            completion_count = completion_count + 1,
+            last_played_timestamp = :timestamp
+    """)
+    suspend fun recordCompletion(songId: String, timestamp: Long)
+
+    /**
+     * Increments session repeat count, sets last session id, and updates timestamp atomically.
+     */
+    @Query("""
+        INSERT INTO song_engagements (song_id, play_count, total_play_duration_ms, last_played_timestamp, skip_before_30s_count, completion_count, session_repeat_count, last_session_id)
+        VALUES (:songId, 0, 0, :timestamp, 0, 0, 1, :sessionId)
+        ON CONFLICT(song_id) DO UPDATE SET
+            session_repeat_count = session_repeat_count + 1,
+            last_session_id = :sessionId,
+            last_played_timestamp = :timestamp
+    """)
+    suspend fun recordSessionRepeat(songId: String, sessionId: String, timestamp: Long)
+
+    /**
      * Get top songs by play count for quick access.
      */
     @Query("SELECT * FROM song_engagements ORDER BY play_count DESC LIMIT :limit")

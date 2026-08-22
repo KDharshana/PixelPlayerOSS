@@ -87,7 +87,32 @@ class EngagementStatsModuleHandler @Inject constructor(
                     "last_played_at",
                     "timestamp"
                 ) ?: 0L
-            ).coerceAtLeast(0L)
+            ).coerceAtLeast(0L),
+            skipBefore30sCount = (
+                readInt(
+                    obj,
+                    "skipBefore30sCount",
+                    "skip_before_30s_count",
+                    "skips"
+                ) ?: 0
+            ).coerceAtLeast(0),
+            completionCount = (
+                readInt(
+                    obj,
+                    "completionCount",
+                    "completion_count",
+                    "completions"
+                ) ?: 0
+            ).coerceAtLeast(0),
+            sessionRepeatCount = (
+                readInt(
+                    obj,
+                    "sessionRepeatCount",
+                    "session_repeat_count",
+                    "repeats"
+                ) ?: 0
+            ).coerceAtLeast(0),
+            lastSessionId = readString(obj, "lastSessionId", "last_session_id")
         )
     }
 
@@ -99,7 +124,11 @@ class EngagementStatsModuleHandler @Inject constructor(
             songId = existing.songId,
             playCount = maxOf(existing.playCount, incoming.playCount),
             totalPlayDurationMs = maxOf(existing.totalPlayDurationMs, incoming.totalPlayDurationMs),
-            lastPlayedTimestamp = maxOf(existing.lastPlayedTimestamp, incoming.lastPlayedTimestamp)
+            lastPlayedTimestamp = maxOf(existing.lastPlayedTimestamp, incoming.lastPlayedTimestamp),
+            skipBefore30sCount = maxOf(existing.skipBefore30sCount, incoming.skipBefore30sCount),
+            completionCount = maxOf(existing.completionCount, incoming.completionCount),
+            sessionRepeatCount = maxOf(existing.sessionRepeatCount, incoming.sessionRepeatCount),
+            lastSessionId = incoming.lastSessionId ?: existing.lastSessionId
         )
     }
 
