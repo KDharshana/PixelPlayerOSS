@@ -96,7 +96,12 @@ class CloudOfflineRepository @Inject constructor(
             val request = downloadRequest(
                 downloadId = downloadId,
                 attemptId = attemptId,
-                sourceUri = sourceUri
+                sourceUri = sourceUri,
+                title = song.title,
+                artist = song.displayArtist,
+                album = song.album,
+                artworkUri = song.albumArtUriString,
+                youtubeId = song.youtubeId
             )
 
             val now = System.currentTimeMillis()
@@ -262,7 +267,12 @@ class CloudOfflineRepository @Inject constructor(
     private fun downloadRequest(
         downloadId: String,
         attemptId: String,
-        sourceUri: String
+        sourceUri: String,
+        title: String = "",
+        artist: String = "",
+        album: String = "",
+        artworkUri: String? = null,
+        youtubeId: String? = null
     ) = OneTimeWorkRequestBuilder<CloudTrackDownloadWorker>()
         .setConstraints(
             Constraints.Builder()
@@ -274,7 +284,12 @@ class CloudOfflineRepository @Inject constructor(
             workDataOf(
                 CloudTrackDownloadWorker.KEY_DOWNLOAD_ID to downloadId,
                 CloudTrackDownloadWorker.KEY_ATTEMPT_ID to attemptId,
-                CloudTrackDownloadWorker.KEY_SOURCE_URI to sourceUri
+                CloudTrackDownloadWorker.KEY_SOURCE_URI to sourceUri,
+                CloudTrackDownloadWorker.KEY_TITLE to title,
+                CloudTrackDownloadWorker.KEY_ARTIST to artist,
+                CloudTrackDownloadWorker.KEY_ALBUM to album,
+                CloudTrackDownloadWorker.KEY_ARTWORK_URI to (artworkUri ?: ""),
+                CloudTrackDownloadWorker.KEY_YOUTUBE_ID to (youtubeId ?: "")
             )
         )
         .addTag(CloudTrackDownloadWorker.TAG)

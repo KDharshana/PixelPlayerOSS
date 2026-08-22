@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lostf1sh.pixelplayeross.R
+import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.offline.OfflineDownload
 import com.lostf1sh.pixelplayeross.data.offline.OfflineDownloadStatus
 import com.lostf1sh.pixelplayeross.presentation.components.MiniPlayerHeight
@@ -61,6 +62,7 @@ import com.lostf1sh.pixelplayeross.presentation.viewmodel.CloudDownloadsViewMode
 @Composable
 fun CloudDownloadsScreen(
     onBack: () -> Unit,
+    onPlaySong: ((Song) -> Unit)? = null,
     viewModel: CloudDownloadsViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -153,11 +155,45 @@ fun CloudDownloadsScreen(
                     )
                 }
                 items(state.completed, key = OfflineDownload::downloadId) { download ->
-                    DownloadItemCard(download = download, onRemove = { viewModel.remove(download) })
+                    DownloadItemCard(
+                        download = download,
+                        onRemove = { viewModel.remove(download) },
+                        onClick = if (onPlaySong != null) { { onPlaySong(download.toSong()) } } else null
+                    )
                 }
             }
         }
     }
+}
+
+private fun OfflineDownload.toSong(): Song {
+    val uri = sourceUri
+    val videoId = if (uri.startsWith("youtube://")) uri.removePrefix("youtube://") else null
+    val navId = if (uri.startsWith("navidrome://")) uri.removePrefix("navidrome://") else null
+    val jfId = if (uri.startsWith("jellyfin://")) uri.removePrefix("jellyfin://") else null
+    val songId = when {
+        videoId != null -> "youtube_$videoId"
+        navId != null -> "navidrome_$navId"
+        jfId != null -> "jellyfin_$jfId"
+        else -> downloadId
+    }
+    return Song(
+        id = songId,
+        title = title.ifBlank { "Downloaded Track" },
+        artist = provider.replaceFirstChar { it.uppercase() },
+        artistId = 0L,
+        album = "Offline Downloads",
+        albumId = 0L,
+        albumArtist = null,
+        path = localPath ?: sourceUri,
+        contentUriString = sourceUri,
+        albumArtUriString = null,
+        duration = 0L,
+        mimeType = null,
+        bitrate = null,
+        sampleRate = null,
+        youtubeId = videoId
+    )
 }
 
 @Composable
@@ -228,12 +264,15 @@ private fun SectionHeader(title: String, count: Int) {
 private fun DownloadItemCard(
     download: OfflineDownload,
     onRemove: () -> Unit,
+    onClick: (() -> Unit)? = null,
     onRetry: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val visual = download.status.visual()
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
+        onClick = onClick ?: {},
+        enabled = onClick != null,
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer

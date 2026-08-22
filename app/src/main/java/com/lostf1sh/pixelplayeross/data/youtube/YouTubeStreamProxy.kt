@@ -34,7 +34,29 @@ class YouTubeStreamProxy @Inject constructor(
         "ytimg.com"
     )
 
-    override val cacheExpirationMs: Long = 4L * 3600 * 1000L // 4 hours
+    override val cacheExpirationMs: Long = 4L * 3600 * 1000L // 4 hours fallback
+
+    override fun extractExpirationMs(id: String, url: String, defaultExpirationMs: Long): Long {
+        return try {
+            val uri = Uri.parse(url)
+            val expireParam = uri.getQueryParameter("expire")?.toLongOrNull()
+            if (expireParam != null && expireParam > 0) {
+                val expireEpochMs = expireParam * 1000L
+                val remainingMs = expireEpochMs - System.currentTimeMillis()
+                // Leave a 5-minute safety margin before true upstream expiration
+                val safeRemainingMs = remainingMs - 5 * 60 * 1000L
+                if (safeRemainingMs > 0) {
+                    minOf(safeRemainingMs, defaultExpirationMs)
+                } else {
+                    60_000L // Minimum 1 minute
+                }
+            } else {
+                defaultExpirationMs
+            }
+        } catch (_: Exception) {
+            defaultExpirationMs
+        }
+    }
 
     override fun upstreamHeaders(): Map<String, String> {
         val headers = mutableMapOf(

@@ -168,13 +168,13 @@ object InnertubeParser {
                     // Check card shelf (top results e.g. artist cards, hero cards)
                     val cardShelf = section.optJSONObject("musicCardShelfRenderer")
                     if (cardShelf != null) {
-                        val cardTitle = cardShelf.optJSONObject("title")
-                            ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+                        val cardSubtitleRuns = cardShelf.optJSONObject("subtitle")?.optJSONArray("runs")
+                        val cardArtist = cardSubtitleRuns?.optJSONObject(0)?.optString("text")?.takeIf { !isTypeOrMetadataBadge(it) && !isBulletOrSeparator(it) }
                         val cardItems = cardShelf.optJSONArray("contents") ?: JSONArray()
                         for (j in 0 until cardItems.length()) {
                             val item = cardItems.optJSONObject(j)
                                 ?.optJSONObject("musicResponsiveListItemRenderer") ?: continue
-                            parseResponsiveListItem(item, songs, albums, artists, playlists, defaultArtist = cardTitle)
+                            parseResponsiveListItem(item, songs, albums, artists, playlists, defaultArtist = cardArtist)
                         }
                     }
 
@@ -238,7 +238,7 @@ object InnertubeParser {
 
     private val SEPARATOR_CHARACTERS = setOf('•', '·', '∙', '‧', '|', '・', '-', '—', '/', ',', '&')
     private val TYPE_STRINGS = setOf(
-        "song", "video", "episode", "podcast", "single", "singles", "album", "ep", "station", "artist", "profile", "playlist"
+        "song", "songs", "video", "videos", "episode", "podcast", "single", "singles", "album", "albums", "ep", "station", "artist", "artists", "profile", "playlist", "playlists", "top result", "top results"
     )
 
     private fun isBulletOrSeparator(text: String): Boolean {
@@ -381,12 +381,11 @@ object InnertubeParser {
             )
             return
         }
-
         if (isAlbum && rootBrowseId.isNotBlank()) {
             val finalArtist = when {
-                !defaultArtist.isNullOrBlank() -> defaultArtist
                 artistRuns.isNotEmpty() -> artistRuns.joinToString(", ")
                 otherRuns.isNotEmpty() -> otherRuns.first()
+                !defaultArtist.isNullOrBlank() && !isTypeOrMetadataBadge(defaultArtist) -> defaultArtist
                 else -> "YouTube Music"
             }
             val year = otherRuns.firstOrNull { it.length == 4 && it.all { ch -> ch.isDigit() } }?.toIntOrNull()
@@ -404,30 +403,42 @@ object InnertubeParser {
         }
 
         if (isArtist && rootBrowseId.isNotBlank()) {
-            val subscribers = otherRuns.firstOrNull {
-                it.contains("subscriber", ignoreCase = true) ||
-                it.contains("monthly", ignoreCase = true) ||
-                it.contains("audience", ignoreCase = true)
-            }
             artists.add(
                 InnertubeArtist(
                     browseId = rootBrowseId,
                     name = title,
-                    thumbnailUri = thumbnailUri,
-                    subscribers = subscribers
+                    thumbnailUri = thumbnailUri
                 )
             )
             return
         }
 
-        // Determine videoId from overlay, navigationEndpoint, playlistItemData or menu items
-        var videoId: String? = item.optJSONObject("overlay")
-            ?.optJSONObject("musicItemThumbnailOverlayRenderer")
-            ?.optJSONObject("content")
-            ?.optJSONObject("musicPlayButtonRenderer")
-            ?.optJSONObject("playNavigationEndpoint")
-            ?.optJSONObject("watchEndpoint")
-            ?.optString("videoId")
+        // Look for videoId in navigationEndpoint or flex columns
+        var videoId: String? = null
+        for (c in 0 until flexColumns.length()) {
+            val col = flexColumns.optJSONObject(c)?.optJSONObject("musicResponsiveListItemFlexColumnRenderer") ?: continue
+            val colRuns = col.optJSONObject("text")?.optJSONArray("runs") ?: continue
+            for (k in 0 until colRuns.length()) {
+                val runObj = colRuns.optJSONObject(k) ?: continue
+                val we = runObj.optJSONObject("navigationEndpoint")?.optJSONObject("watchEndpoint")
+                val vid = we?.optString("videoId")
+                if (!vid.isNullOrBlank()) {
+                    videoId = vid
+                    break
+                }
+            }
+            if (!videoId.isNullOrBlank()) break
+        }
+
+        if (videoId.isNullOrBlank()) {
+            videoId = item.optJSONObject("overlay")
+                ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                ?.optJSONObject("content")
+                ?.optJSONObject("musicPlayButtonRenderer")
+                ?.optJSONObject("playNavigationEndpoint")
+                ?.optJSONObject("watchEndpoint")
+                ?.optString("videoId")
+        }
 
         if (videoId.isNullOrBlank()) {
             videoId = item.optJSONObject("navigationEndpoint")
@@ -458,15 +469,15 @@ object InnertubeParser {
 
         if (!videoId.isNullOrBlank()) {
             val finalArtist = when {
-                !defaultArtist.isNullOrBlank() -> defaultArtist
                 artistRuns.isNotEmpty() -> artistRuns.joinToString(", ")
                 otherRuns.isNotEmpty() -> otherRuns.first()
+                !defaultArtist.isNullOrBlank() && !isTypeOrMetadataBadge(defaultArtist) -> defaultArtist
                 else -> "YouTube Music"
             }
 
-            val finalAlbum = detectedAlbum?.takeIf { !isBulletOrSeparator(it) }
-                ?: if (artistRuns.isNotEmpty() && otherRuns.isNotEmpty()) otherRuns.firstOrNull { !isBulletOrSeparator(it) }
-                else if (otherRuns.size > 1) otherRuns.getOrNull(1)?.takeIf { !isBulletOrSeparator(it) }
+            val finalAlbum = detectedAlbum?.takeIf { !isBulletOrSeparator(it) && !isTypeOrMetadataBadge(it) }
+                ?: if (artistRuns.isNotEmpty() && otherRuns.isNotEmpty()) otherRuns.firstOrNull { !isBulletOrSeparator(it) && !isTypeOrMetadataBadge(it) }
+                else if (otherRuns.size > 1) otherRuns.getOrNull(1)?.takeIf { !isBulletOrSeparator(it) && !isTypeOrMetadataBadge(it) }
                 else null
 
             val durationSec = detectedDuration?.let { parseDurationToSeconds(it) } ?: 0L
@@ -501,7 +512,16 @@ object InnertubeParser {
                 val subtitleRuns = hdr.optJSONObject("subtitle")?.optJSONArray("runs")
                     ?: hdr.optJSONObject("straplineTextOne")?.optJSONArray("runs")
                 if (subtitleRuns != null && subtitleRuns.length() > 0) {
-                    author = subtitleRuns.optJSONObject(0)?.optString("text") ?: author
+                    val candidateAuthors = mutableListOf<String>()
+                    for (r in 0 until subtitleRuns.length()) {
+                        val runObj = subtitleRuns.optJSONObject(r) ?: continue
+                        val txt = runObj.optString("text", "").trim()
+                        if (txt.isBlank() || isBulletOrSeparator(txt) || isTypeOrMetadataBadge(txt) || isDuration(txt)) continue
+                        candidateAuthors.add(txt)
+                    }
+                    if (candidateAuthors.isNotEmpty()) {
+                        author = candidateAuthors.joinToString(", ")
+                    }
                 }
                 val thumbs = hdr.optJSONObject("thumbnail")?.optJSONObject("croppedSquareThumbnailRenderer")
                     ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
@@ -566,12 +586,20 @@ object InnertubeParser {
                 val subtitleRuns = hdr.optJSONObject("subtitle")?.optJSONArray("runs")
                     ?: hdr.optJSONObject("straplineTextOne")?.optJSONArray("runs")
                 if (subtitleRuns != null && subtitleRuns.length() > 0) {
-                    artist = subtitleRuns.optJSONObject(0)?.optString("text") ?: artist
+                    val candidateArtists = mutableListOf<String>()
                     for (r in 0 until subtitleRuns.length()) {
-                        val txt = subtitleRuns.optJSONObject(r)?.optString("text", "") ?: ""
+                        val runObj = subtitleRuns.optJSONObject(r) ?: continue
+                        val txt = runObj.optString("text", "").trim()
+                        if (txt.isBlank() || isBulletOrSeparator(txt)) continue
+
                         if (txt.length == 4 && txt.all { it.isDigit() }) {
                             year = txt.toIntOrNull()
+                        } else if (!isTypeOrMetadataBadge(txt) && !isDuration(txt)) {
+                            candidateArtists.add(txt)
                         }
+                    }
+                    if (candidateArtists.isNotEmpty()) {
+                        artist = candidateArtists.joinToString(", ")
                     }
                 }
                 val thumbs = hdr.optJSONObject("thumbnail")?.optJSONObject("croppedSquareThumbnailRenderer")
@@ -758,9 +786,35 @@ object InnertubeParser {
         artists: MutableList<InnertubeArtist>,
         playlists: MutableList<InnertubePlaylist>
     ) {
-        val title = item.optJSONObject("title")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: return
+        val title = item.optJSONObject("title")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text")
+            ?: item.optJSONObject("title")?.optString("simpleText") ?: return
         val subtitleRuns = item.optJSONObject("subtitle")?.optJSONArray("runs") ?: JSONArray()
-        val author = subtitleRuns.optJSONObject(0)?.optString("text") ?: "Unknown"
+        
+        val candidateArtists = mutableListOf<String>()
+        val otherSubtitleRuns = mutableListOf<String>()
+        for (r in 0 until subtitleRuns.length()) {
+            val runObj = subtitleRuns.optJSONObject(r) ?: continue
+            val txt = runObj.optString("text", "").trim()
+            if (txt.isBlank() || isBulletOrSeparator(txt)) continue
+
+            val endpoint = runObj.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
+            val pageType = endpoint?.optJSONObject("browseEndpointContextSupportedConfigs")
+                ?.optJSONObject("browseEndpointContextMusicConfig")
+                ?.optString("pageType")
+            val browseId = endpoint?.optString("browseId", "") ?: ""
+
+            if (pageType == "MUSIC_PAGE_TYPE_ARTIST" || pageType == "MUSIC_PAGE_TYPE_USER_CHANNEL" || browseId.startsWith("UC")) {
+                candidateArtists.add(txt)
+            } else if (!isTypeOrMetadataBadge(txt) && !isDuration(txt)) {
+                otherSubtitleRuns.add(txt)
+            }
+        }
+
+        val author = when {
+            candidateArtists.isNotEmpty() -> candidateArtists.joinToString(", ")
+            otherSubtitleRuns.isNotEmpty() -> otherSubtitleRuns.first()
+            else -> "YouTube Music"
+        }
 
         val thumbnails = item.optJSONObject("thumbnailRenderer")
             ?.optJSONObject("musicThumbnailRenderer")
@@ -780,6 +834,7 @@ object InnertubeParser {
                     videoId = videoId,
                     title = title,
                     artist = author,
+                    artists = if (candidateArtists.isNotEmpty()) candidateArtists else listOf(author),
                     thumbnailUri = thumbnail
                 )
             )
@@ -794,6 +849,14 @@ object InnertubeParser {
                         browseId = browseId,
                         title = title,
                         artist = author,
+                        thumbnailUri = thumbnail
+                    )
+                )
+            } else if (browseId.startsWith("UC")) {
+                artists.add(
+                    InnertubeArtist(
+                        browseId = browseId,
+                        name = title,
                         thumbnailUri = thumbnail
                     )
                 )

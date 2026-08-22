@@ -33,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.lostf1sh.pixelplayeross.data.preferences.LaunchTab
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
+import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.presentation.screens.AlbumDetailScreen
 import com.lostf1sh.pixelplayeross.presentation.screens.AudioBookmarkFolderScreen
 import com.lostf1sh.pixelplayeross.presentation.screens.AudioBookmarksScreen
@@ -620,7 +621,10 @@ fun AppNavigation(
                 popExitTransition = { popExitTransition() },
             ) {
                 ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
-                    CloudDownloadsScreen(onBack = { navController.popBackStack() })
+                    CloudDownloadsScreen(
+                        onBack = { navController.popBackStack() },
+                        onPlaySong = { song -> playerViewModel.playSong(song) }
+                    )
                 }
             }
             composable(

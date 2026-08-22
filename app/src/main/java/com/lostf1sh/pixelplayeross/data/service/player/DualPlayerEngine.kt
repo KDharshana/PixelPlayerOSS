@@ -1066,6 +1066,20 @@ class DualPlayerEngine @Inject constructor(
         uri
     }
 
+    /**
+     * Invalidates any cached resolution for a cloud/YouTube URI, forcing a fresh lookup.
+     */
+    fun invalidateCloudUri(uri: Uri) {
+        val uriString = uri.toString()
+        resolvedUriCache.remove(uriString)
+        val id = uri.host ?: uri.path?.removePrefix("/") ?: return
+        when (uri.scheme) {
+            "youtube" -> youTubeStreamProxy.invalidate(id)
+            "navidrome" -> navidromeStreamProxy.invalidate(id)
+            "jellyfin" -> jellyfinStreamProxy.invalidate(id)
+        }
+    }
+
     private suspend fun resolveNavidromeUriAsync(uriString: String): Uri? = withContext(Dispatchers.IO) {
         if (!navidromeStreamProxy.ensureReady(5_000L)) return@withContext null
         navidromeStreamProxy.warmUpStreamUrl(uriString)
@@ -1080,24 +1094,13 @@ class DualPlayerEngine @Inject constructor(
 
     private suspend fun resolveYouTubeUriAsync(uriString: String): Uri? = withContext(Dispatchers.IO) {
         android.util.Log.d("YouTubeMusic", "DualPlayerEngine resolveYouTubeUriAsync starting for: $uriString")
-        val uri = Uri.parse(uriString)
-        val videoId = uri.host ?: uri.path?.removePrefix("/")
-        if (!videoId.isNullOrBlank()) {
-            val directUrl = youTubeExtractorManager.extractAudioStreamUrl(videoId)
-            if (!directUrl.isNullOrBlank()) {
-                val directUri = Uri.parse(directUrl)
-                android.util.Log.d("YouTubeMusic", "DualPlayerEngine resolved direct HTTPS URI for videoId=$videoId: $directUri")
-                return@withContext directUri
-            }
-        }
-
         if (!youTubeStreamProxy.ensureReady(5_000L)) {
             android.util.Log.e("YouTubeMusic", "DualPlayerEngine youTubeStreamProxy is not ready!")
             return@withContext null
         }
         youTubeStreamProxy.warmUpStreamUrl(uriString)
         val resolved = youTubeStreamProxy.resolveYouTubeUri(uriString)?.let { Uri.parse(it) }
-        android.util.Log.d("YouTubeMusic", "DualPlayerEngine resolveYouTubeUriAsync fallback proxy finished: $resolved")
+        android.util.Log.d("YouTubeMusic", "DualPlayerEngine resolveYouTubeUriAsync proxy resolved: $resolved")
         resolved
     }
 

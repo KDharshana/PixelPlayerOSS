@@ -6,9 +6,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.junit.Ignore
 import org.junit.Test
 import java.io.File
 
+@Ignore("Manual live dump test")
 class InnertubeRawDumpTest {
 
     @Test

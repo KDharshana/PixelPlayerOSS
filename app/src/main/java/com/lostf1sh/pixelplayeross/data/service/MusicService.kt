@@ -1187,18 +1187,66 @@ class MusicService : MediaSessionService() {
             schedulePlaybackSnapshotPersist()
         }
 
+        private var lastErrorMediaId: String? = null
+        private var currentItemRetryAttempt = 0
+
         override fun onPlayerError(error: PlaybackException) {
             val player = mediaSession?.player ?: engine.masterPlayer
-            Timber.tag(TAG).e(error, "Player error on item %s", player.currentMediaItem?.mediaId)
+            val currentItem = player.currentMediaItem
+            val mediaId = currentItem?.mediaId
+            val uri = currentItem?.localConfiguration?.uri
+
+            Timber.tag(TAG).e(
+                error,
+                "Playback error: code=${error.errorCode} (${error.errorCodeName}), mediaId=$mediaId, uri=$uri, cause=${error.cause?.message}"
+            )
             AdvancedPerformanceDiagnostics.recordEventIfEnabled(
                 type = AdvancedPerformanceDiagnostics.EventTypes.PLAYBACK,
                 name = "player_error"
             ) {
                 mapOf(
                     "code" to error.errorCodeName,
-                    "message" to (error.message ?: error.javaClass.simpleName)
+                    "mediaId" to (mediaId ?: "null"),
+                    "uri" to (uri?.toString() ?: "null"),
+                    "message" to (error.message ?: error.javaClass.simpleName),
+                    "cause" to (error.cause?.javaClass?.simpleName ?: "none")
                 )
             }
+
+            val isCloudOrProxyUri = uri != null && (uri.scheme in listOf("youtube", "navidrome", "jellyfin") || uri.host == "127.0.0.1")
+            if (isCloudOrProxyUri && (lastErrorMediaId != mediaId || currentItemRetryAttempt < 1)) {
+                lastErrorMediaId = mediaId
+                currentItemRetryAttempt++
+                Timber.tag(TAG).w("Attempting automatic refresh and retry for current item ($mediaId, attempt $currentItemRetryAttempt)...")
+
+                serviceScope.launch {
+                    try {
+                        engine.invalidateCloudUri(uri)
+                        val resolvedItem = engine.resolveMediaItem(currentItem)
+                        val currentIndex = player.currentMediaItemIndex
+                        if (currentIndex != androidx.media3.common.C.INDEX_UNSET) {
+                            val currentPos = player.currentPosition
+                            player.replaceMediaItem(currentIndex, resolvedItem)
+                            player.seekTo(currentIndex, currentPos)
+                            player.prepare()
+                            player.play()
+                            return@launch
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag(TAG).e(e, "Failed to refresh and retry failed media item")
+                    }
+
+                    proceedToNextOnError(player)
+                }
+                return
+            }
+
+            proceedToNextOnError(player)
+        }
+
+        private fun proceedToNextOnError(player: Player) {
+            currentItemRetryAttempt = 0
+            lastErrorMediaId = null
             if (player.hasNextMediaItem() && consecutivePlaybackErrors < maxConsecutivePlaybackErrors) {
                 consecutivePlaybackErrors++
                 player.seekToNextMediaItem()

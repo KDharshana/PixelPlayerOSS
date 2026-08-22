@@ -321,11 +321,22 @@ class YouTubeRepository @Inject constructor(
     }
 
     private fun InnertubeTrack.toDomainSong(): Song {
+        val artistList = if (artists.isNotEmpty()) artists else listOf(artist)
+        val artistRefs = artistList.mapIndexed { index, name ->
+            com.lostf1sh.pixelplayeross.data.model.ArtistRef(
+                id = if (index == 0) -Math.abs(name.hashCode().toLong().takeIf { it != 0L } ?: 1L)
+                else (name.hashCode().toLong() * -1L) - 10_000L,
+                name = name,
+                isPrimary = index == 0
+            )
+        }
+        val calculatedArtistId = artistRefs.firstOrNull()?.id ?: 0L
         return Song(
             id = "youtube_$videoId",
             title = title,
             artist = artist,
-            artistId = 0L,
+            artistId = calculatedArtistId,
+            artists = artistRefs,
             album = album ?: "YouTube Music",
             albumId = 0L,
             albumArtist = artist,

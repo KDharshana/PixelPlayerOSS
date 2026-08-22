@@ -194,6 +194,20 @@ abstract class CloudStreamProxy<K : Any>(
 
     private val inFlightResolutions = ConcurrentHashMap<K, Deferred<String?>>()
 
+    /**
+     * Invalidate any cached stream URL and cancel in-flight resolutions for [id].
+     */
+    fun invalidate(id: K) {
+        urlCache.remove(id)
+        inFlightResolutions.remove(id)?.cancel()
+    }
+
+    /**
+     * Calculates the actual cache expiration for a resolved stream URL.
+     * Subclasses (e.g. YouTubeStreamProxy) can inspect URL parameters such as &expire= to constrain TTL.
+     */
+    protected open fun extractExpirationMs(id: K, url: String, defaultExpirationMs: Long): Long = defaultExpirationMs
+
     protected suspend fun getOrFetchStreamUrl(id: K): String? {
         urlCache[id]?.let { cached ->
             if (!cached.isExpired()) return cached.url
@@ -201,7 +215,8 @@ abstract class CloudStreamProxy<K : Any>(
         val deferred = inFlightResolutions.computeIfAbsent(id) {
             proxyScope.async {
                 resolveStreamUrl(id)?.also { url ->
-                    urlCache[id] = CachedUrl(url, System.currentTimeMillis(), cacheExpirationMs)
+                    val expiration = extractExpirationMs(id, url, cacheExpirationMs)
+                    urlCache[id] = CachedUrl(url, System.currentTimeMillis(), expiration)
                 }
             }
         }
@@ -293,7 +308,7 @@ abstract class CloudStreamProxy<K : Any>(
                             return@get
                         }
 
-                        val streamUrl = getOrFetchStreamUrl(id)
+                        var streamUrl = getOrFetchStreamUrl(id)
                         if (streamUrl.isNullOrBlank()) {
                             call.respond(HttpStatusCode.NotFound, "No stream URL available")
                             return@get
@@ -308,23 +323,43 @@ abstract class CloudStreamProxy<K : Any>(
                             return@get
                         }
 
-                        val requestBuilder = Request.Builder().url(streamUrl)
-                        rangeValidation.normalizedHeader?.let {
-                            requestBuilder.header("Range", it)
-                        }
-                        upstreamHeaders().forEach { (name, value) ->
-                            requestBuilder.header(name, value)
+                        var response = withContext(Dispatchers.IO) {
+                            val requestBuilder = Request.Builder().url(streamUrl)
+                            rangeValidation.normalizedHeader?.let {
+                                requestBuilder.header("Range", it)
+                            }
+                            upstreamHeaders().forEach { (name, value) ->
+                                requestBuilder.header(name, value)
+                            }
+                            streamingClient.newCall(requestBuilder.build()).execute()
                         }
 
-                        val response = withContext(Dispatchers.IO) {
-                            streamingClient.newCall(requestBuilder.build()).execute()
+                        // Automatic upstream 401/403/404/410 recovery (expired or stale upstream stream URL)
+                        if (response.code in listOf(401, 403, 404, 410)) {
+                            Timber.tag(proxyTag).w("Upstream returned ${response.code} for $id, evicting cache and refreshing...")
+                            response.close()
+                            invalidate(id)
+                            val freshUrl = getOrFetchStreamUrl(id)
+                            if (!freshUrl.isNullOrBlank() && CloudStreamSecurity.isSafeRemoteStreamUrl(freshUrl, allowedHostSuffixes, true)) {
+                                streamUrl = freshUrl
+                                response = withContext(Dispatchers.IO) {
+                                    val retryBuilder = Request.Builder().url(streamUrl)
+                                    rangeValidation.normalizedHeader?.let {
+                                        retryBuilder.header("Range", it)
+                                    }
+                                    upstreamHeaders().forEach { (name, value) ->
+                                        retryBuilder.header(name, value)
+                                    }
+                                    streamingClient.newCall(retryBuilder.build()).execute()
+                                }
+                            }
                         }
 
                         response.use { upstream ->
                             if (upstream.code != 200 && upstream.code != 206) {
                                 call.respond(
                                     CloudStreamSecurity.mapUpstreamStatusToProxyStatus(upstream.code),
-                                    "Upstream stream request failed"
+                                    "Upstream stream request failed with code ${upstream.code}"
                                 )
                                 return@get
                             }

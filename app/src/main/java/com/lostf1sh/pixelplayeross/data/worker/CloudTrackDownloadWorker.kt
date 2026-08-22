@@ -7,16 +7,27 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.lostf1sh.pixelplayeross.data.database.OfflineTrackDao
+import com.lostf1sh.pixelplayeross.data.database.LyricsDao
+import com.lostf1sh.pixelplayeross.data.database.LyricsEntity
+import com.lostf1sh.pixelplayeross.data.database.YouTubeDao
+import com.lostf1sh.pixelplayeross.data.database.YouTubeSongEntity
 import com.lostf1sh.pixelplayeross.data.jellyfin.JellyfinRepository
+import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.navidrome.NavidromeRepository
 import com.lostf1sh.pixelplayeross.data.offline.CloudOfflineRepository
 import com.lostf1sh.pixelplayeross.data.offline.OfflineDownloadStatus
+import com.lostf1sh.pixelplayeross.data.repository.LyricsRepository
 import com.lostf1sh.pixelplayeross.data.stream.CloudStreamSecurity
+import com.kyant.taglib.Picture
+import com.kyant.taglib.TagLib
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.io.File
 import java.io.IOException
+import java.io.RandomAccessFile
+import java.util.Locale
 import java.util.concurrent.TimeUnit
+import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ensureActive
@@ -35,6 +46,9 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
     private val navidromeRepository: NavidromeRepository,
     private val jellyfinRepository: JellyfinRepository,
     private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
+    private val lyricsRepository: LyricsRepository,
+    private val lyricsDao: LyricsDao,
+    private val youTubeDao: YouTubeDao,
     baseOkHttpClient: OkHttpClient
 ) : CoroutineWorker(appContext, workerParams) {
     private val client = baseOkHttpClient.newBuilder()
@@ -151,6 +165,27 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
                 )
                 if (completed == 0) {
                     finalFile.delete()
+                } else {
+                    // Post-process metadata, artwork image, and lyrics
+                    val title = inputData.getString(KEY_TITLE)?.takeIf { it.isNotBlank() } ?: entity.title
+                    val artist = inputData.getString(KEY_ARTIST)?.takeIf { it.isNotBlank() } ?: ""
+                    val album = inputData.getString(KEY_ALBUM)?.takeIf { it.isNotBlank() } ?: "Offline Downloads"
+                    val artworkUri = inputData.getString(KEY_ARTWORK_URI)?.takeIf { it.isNotBlank() }
+                    val youtubeId = inputData.getString(KEY_YOUTUBE_ID)?.takeIf { it.isNotBlank() }
+                        ?: if (sourceUri.startsWith("youtube://")) sourceUri.removePrefix("youtube://") else null
+
+                    postProcessDownloadedTrack(
+                        file = finalFile,
+                        downloadId = downloadId,
+                        attemptId = attemptId,
+                        sourceUri = sourceUri,
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        artworkUri = artworkUri,
+                        youtubeId = youtubeId,
+                        mimeType = entity.mimeType
+                    )
                 }
                 Result.success()
             }
@@ -188,6 +223,157 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
                 else -> Result.failure(
                     workDataOf(KEY_ERROR to (error.message ?: "Download failed"))
                 )
+            }
+        }
+    }
+
+    private suspend fun postProcessDownloadedTrack(
+        file: File,
+        downloadId: String,
+        attemptId: String,
+        sourceUri: String,
+        title: String,
+        artist: String,
+        album: String,
+        artworkUri: String?,
+        youtubeId: String?,
+        mimeType: String?
+    ) {
+        val fileStem = CloudOfflineRepository.attemptFileStem(downloadId, attemptId)
+        val downloadDir = CloudOfflineRepository.downloadDirectory(applicationContext)
+
+        // 1. Download and save cover image
+        var pictureBytes: ByteArray? = null
+        var pictureMime: String = "image/jpeg"
+        val effectiveArtUrl = artworkUri ?: (youtubeId?.let { "https://i.ytimg.com/vi/$it/maxresdefault.jpg" })
+        if (!effectiveArtUrl.isNullOrBlank()) {
+            try {
+                val artReq = Request.Builder().url(effectiveArtUrl).build()
+                client.newCall(artReq).execute().use { artResp ->
+                    if (artResp.isSuccessful) {
+                        val bytes = artResp.body.bytes()
+                        if (bytes != null && bytes.isNotEmpty()) {
+                            pictureBytes = bytes
+                            pictureMime = artResp.header("Content-Type")?.substringBefore(';') ?: "image/jpeg"
+                            val imageFile = downloadDir.resolve("$fileStem.jpg")
+                            imageFile.writeBytes(bytes)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "Failed to download cover art for $sourceUri")
+            }
+        }
+
+        // 2. Download and save lyrics (synced LRC format)
+        var lyricsContent: String? = null
+        var isLyricsSynced = false
+        try {
+            val tempSong = Song(
+                id = if (!youtubeId.isNullOrBlank()) "youtube_$youtubeId" else downloadId,
+                title = title,
+                artist = artist,
+                artistId = 0L,
+                album = album,
+                albumId = 0L,
+                albumArtist = artist,
+                path = file.absolutePath,
+                contentUriString = sourceUri,
+                albumArtUriString = effectiveArtUrl,
+                duration = 0L,
+                youtubeId = youtubeId,
+                mimeType = mimeType,
+                bitrate = null,
+                sampleRate = null
+            )
+            val lyricsResult = lyricsRepository.getLyrics(tempSong, forceRefresh = true)
+            if (lyricsResult != null) {
+                val lrcBuilder = StringBuilder()
+                if (!lyricsResult.synced.isNullOrEmpty()) {
+                    isLyricsSynced = true
+                    lyricsResult.synced.forEach { syncedLine ->
+                        val startMs = syncedLine.time
+                        val min = (startMs / 60000)
+                        val sec = ((startMs % 60000) / 1000)
+                        val ms = ((startMs % 1000) / 10)
+                        lrcBuilder.append(String.format(Locale.US, "[%02d:%02d.%02d]%s\n", min, sec, ms, syncedLine.line))
+                    }
+                } else if (!lyricsResult.plain.isNullOrEmpty()) {
+                    lrcBuilder.append(lyricsResult.plain.joinToString("\n"))
+                }
+
+                val formattedLyrics = lrcBuilder.toString().trim()
+                if (formattedLyrics.isNotBlank()) {
+                    lyricsContent = formattedLyrics
+                    val lrcFile = downloadDir.resolve("$fileStem.lrc")
+                    lrcFile.writeText(formattedLyrics)
+
+                    try {
+                        val numericSongId = Math.abs(tempSong.id.hashCode().toLong().takeIf { it != 0L } ?: 1L)
+                        lyricsDao.insert(
+                            LyricsEntity(
+                                songId = numericSongId,
+                                content = formattedLyrics,
+                                isSynced = isLyricsSynced,
+                                source = "download"
+                            )
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "Failed to download lyrics for $sourceUri")
+        }
+
+        // 3. Embed metadata tags, lyrics, and artwork picture using TagLib
+        try {
+            ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_WRITE).use { fd ->
+                val metadata = TagLib.getMetadata(fd.dup().detachFd(), readPictures = false)
+                val propertyMap = HashMap(metadata?.propertyMap ?: emptyMap())
+
+                if (title.isNotBlank()) propertyMap["TITLE"] = arrayOf(title)
+                if (artist.isNotBlank()) propertyMap["ARTIST"] = arrayOf(artist)
+                if (album.isNotBlank()) propertyMap["ALBUM"] = arrayOf(album)
+                lyricsContent?.let {
+                    propertyMap["LYRICS"] = arrayOf(it)
+                    if (isLyricsSynced) {
+                        propertyMap["SYNCEDLYRICS"] = arrayOf(it)
+                    }
+                }
+
+                TagLib.savePropertyMap(fd.dup().detachFd(), propertyMap)
+
+                pictureBytes?.let { bytes ->
+                    val pic = Picture(
+                        data = bytes,
+                        description = "Front Cover",
+                        pictureType = "Front Cover",
+                        mimeType = pictureMime
+                    )
+                    TagLib.savePictures(fd.dup().detachFd(), arrayOf(pic))
+                }
+            }
+            RandomAccessFile(file, "rw").use { it.fd.sync() }
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "Failed to embed TagLib metadata for $file")
+        }
+
+        // 4. Save/Update in YouTubeDao if YouTube track
+        if (!youtubeId.isNullOrBlank()) {
+            try {
+                youTubeDao.insertSong(
+                    YouTubeSongEntity(
+                        id = "youtube_$youtubeId",
+                        videoId = youtubeId,
+                        title = title,
+                        artist = artist,
+                        album = album,
+                        duration = 0L,
+                        thumbnailUrl = effectiveArtUrl
+                    )
+                )
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "Failed to save YouTube song entity")
             }
         }
     }
@@ -299,6 +485,11 @@ class CloudTrackDownloadWorker @AssistedInject constructor(
         const val KEY_DOWNLOAD_ID = "download_id"
         const val KEY_ATTEMPT_ID = "attempt_id"
         const val KEY_SOURCE_URI = "source_uri"
+        const val KEY_TITLE = "title"
+        const val KEY_ARTIST = "artist"
+        const val KEY_ALBUM = "album"
+        const val KEY_ARTWORK_URI = "artwork_uri"
+        const val KEY_YOUTUBE_ID = "youtube_id"
         const val KEY_BYTES = "bytes"
         const val KEY_TOTAL_BYTES = "total_bytes"
         const val KEY_ERROR = "error"
