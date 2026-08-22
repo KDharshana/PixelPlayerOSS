@@ -3,18 +3,19 @@ package com.lostf1sh.pixelplayeross.presentation.youtube.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lostf1sh.pixelplayeross.data.database.EngagementDao
-import com.lostf1sh.pixelplayeross.data.database.MusicDao
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeBrowseSection
 import com.lostf1sh.pixelplayeross.data.recommendation.AdaptiveWeightTuner
 import com.lostf1sh.pixelplayeross.data.recommendation.CandidateAggregator
 import com.lostf1sh.pixelplayeross.data.recommendation.PersonalizedRanker
+import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
@@ -37,7 +38,7 @@ class YouTubeDashboardViewModel @Inject constructor(
     private val personalizedRanker: PersonalizedRanker,
     private val adaptiveWeightTuner: AdaptiveWeightTuner,
     private val engagementDao: EngagementDao,
-    private val musicDao: MusicDao
+    private val musicRepository: MusicRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<YouTubeDashboardUiState>(YouTubeDashboardUiState.Loading)
@@ -85,8 +86,9 @@ class YouTubeDashboardViewModel @Inject constructor(
                                 } else {
                                     val topSongs = engagementDao.getTopPlayedSongs(10)
                                     val recentSongs = engagementDao.getRecentlyPlayedSongs(10)
-                                    val seedIds = (topSongs + recentSongs).map { it.songId }.distinct()
-                                    val seedSongs = musicDao.getSongsByIds(seedIds)
+                                    val seedIds = (topSongs + recentSongs).map { it.songId }.toSet()
+                                    val allAudioSongs = musicRepository.getAudioFiles().first()
+                                    val seedSongs = allAudioSongs.filter { it.id in seedIds }
                                     val candidates = candidateAggregator.collect(seedSongs, limit = 60)
                                     val engagementsMap = allEngagements.associateBy { it.songId }
                                     val tunedWeights = adaptiveWeightTuner.computeTunedWeights(allEngagements)
@@ -115,4 +117,3 @@ class YouTubeDashboardViewModel @Inject constructor(
         }
     }
 }
-

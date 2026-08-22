@@ -9,18 +9,19 @@ import androidx.work.PeriodicWorkRequest
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
 import com.lostf1sh.pixelplayeross.data.database.EngagementDao
-import com.lostf1sh.pixelplayeross.data.database.MusicDao
 import com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzRepository
 import com.lostf1sh.pixelplayeross.data.recommendation.ItemEmbeddingStore
+import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
 
 /**
  * Background worker to periodically maintain recommendation graphs:
  * - Prunes stale item co-occurrence counts (>30 days).
- * - Pre-fetches and caches ListenBrainz Labs similar artists for top played artists.
+ * - Pre-fetches and caches ListenBrainz Labs recordings for top played artists.
  */
 @HiltWorker
 class RecommendationWorker @AssistedInject constructor(
@@ -28,7 +29,7 @@ class RecommendationWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val itemEmbeddingStore: ItemEmbeddingStore,
     private val engagementDao: EngagementDao,
-    private val musicDao: MusicDao,
+    private val musicRepository: MusicRepository,
     private val listenBrainzRepository: ListenBrainzRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
@@ -55,12 +56,15 @@ class RecommendationWorker @AssistedInject constructor(
             val pruned = itemEmbeddingStore.pruneStaleEntries(thirtyDaysAgo)
             Timber.tag("RecommendationWorker").d("Pruned %d stale co-occurrence entries", pruned)
 
-            // 2. Pre-fetch similar artists for top 10 played songs
+            // 2. Pre-fetch LB radio for top 10 played songs
             val topEngagements = engagementDao.getTopPlayedSongs(10)
-            val seedSongs = musicDao.getSongsByIds(topEngagements.map { it.songId })
+            val topSongIds = topEngagements.map { it.songId }.toSet()
+            val allSongs = runCatching { musicRepository.getAudioFiles().first() }.getOrDefault(emptyList())
+            val seedSongs = allSongs.filter { it.id in topSongIds }
+
             for (song in seedSongs) {
-                val mbid = song.mbArtistId?.takeIf { it.isNotBlank() } ?: continue
-                listenBrainzRepository.getSimilarArtists(mbid)
+                val artist = song.artist.trim().takeIf { it.isNotBlank() } ?: continue
+                listenBrainzRepository.getLbRadioTracks(artist)
             }
 
             Timber.tag("RecommendationWorker").i("Completed recommendation maintenance successfully")

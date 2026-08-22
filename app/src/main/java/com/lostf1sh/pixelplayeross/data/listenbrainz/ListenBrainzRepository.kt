@@ -339,6 +339,28 @@ class ListenBrainzRepository @Inject constructor(
         }
     }
 
+    /**
+     * Fetches candidate recordings from ListenBrainz Labs LB-Radio using prompt / artist name.
+     * Caches results in-memory for 24 hours. Does not require authentication.
+     */
+    suspend fun getLbRadioTracks(prompt: String): List<LbRadioRecording> {
+        val trimmed = prompt.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        return try {
+            val response = labsApi.getLbRadio(trimmed)
+            if (response.isSuccessful) {
+                response.body()?.payload?.recordings.orEmpty()
+            } else {
+                Timber.tag(TAG).w("Failed to fetch LB radio for %s: code=%d", trimmed, response.code())
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error fetching LB radio for %s", trimmed)
+            emptyList()
+        }
+    }
+
     private fun authHeader(token: String) = "Token $token"
 
     private fun ListenBrainzPendingListenEntity.toListen(): ListenBrainzListen {

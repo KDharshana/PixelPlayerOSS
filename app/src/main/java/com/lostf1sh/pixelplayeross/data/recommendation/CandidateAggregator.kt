@@ -7,6 +7,7 @@ import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -65,22 +66,21 @@ class CandidateAggregator @Inject constructor(
 
     private suspend fun collectCooccurrenceCandidates(seeds: List<Song>): List<RecommendationCandidate> {
         val results = mutableListOf<RecommendationCandidate>()
+        val allSongs = runCatching { musicRepository.getAudioFiles().first() }.getOrDefault(emptyList())
+        val songsById = allSongs.associateBy { it.id }
+
         for (seed in seeds.take(5)) {
             val similar = itemEmbeddingStore.getSimilarSongs(seed.id, limit = 5)
-            if (similar.isNotEmpty()) {
-                val neighborIds = similar.map { it.first }
-                val neighborSongs = musicRepository.getSongsByIds(neighborIds)
-                val scoreMap = similar.toMap()
-                neighborSongs.forEach { song ->
-                    results.add(
-                        RecommendationCandidate(
-                            song = song,
-                            sourceType = CandidateSourceType.LIBRARY_COOCCURRENCE,
-                            sourceStrength = scoreMap[song.id] ?: 0.75,
-                            seedSongId = seed.id
-                        )
+            for ((neighborId, score) in similar) {
+                val neighborSong = songsById[neighborId] ?: continue
+                results.add(
+                    RecommendationCandidate(
+                        song = neighborSong,
+                        sourceType = CandidateSourceType.LIBRARY_COOCCURRENCE,
+                        sourceStrength = score,
+                        seedSongId = seed.id
                     )
-                }
+                )
             }
         }
         return results
@@ -107,16 +107,18 @@ class CandidateAggregator @Inject constructor(
     private suspend fun collectListenBrainzCandidates(seeds: List<Song>): List<RecommendationCandidate> {
         val results = mutableListOf<RecommendationCandidate>()
         for (seed in seeds) {
-            val mbArtistId = seed.mbArtistId?.takeIf { it.isNotBlank() } ?: continue
-            val similarArtists = runCatching { listenBrainzRepository.getSimilarArtists(mbArtistId) }.getOrDefault(emptyList())
-            for (similar in similarArtists.take(3)) {
-                val songs = runCatching { youTubeRepository.searchSongsPaginated(similar.name).songs }.getOrDefault(emptyList())
-                songs.take(2).forEach { song ->
+            val artistName = seed.artist.trim().takeIf { it.isNotBlank() } ?: continue
+            val recordings = runCatching { listenBrainzRepository.getLbRadioTracks(artistName) }.getOrDefault(emptyList())
+            for (rec in recordings.take(3)) {
+                val query = "${rec.trackName} ${rec.artistName}".trim()
+                if (query.isBlank()) continue
+                val songs = runCatching { youTubeRepository.searchSongsPaginated(query).songs }.getOrDefault(emptyList())
+                songs.firstOrNull()?.let { song ->
                     results.add(
                         RecommendationCandidate(
                             song = song,
                             sourceType = CandidateSourceType.LB_SIMILAR_ARTIST,
-                            sourceStrength = similar.score.coerceIn(0.1, 1.0),
+                            sourceStrength = 0.80,
                             seedSongId = seed.id
                         )
                     )
@@ -128,12 +130,12 @@ class CandidateAggregator @Inject constructor(
 
     private suspend fun collectGenreCandidates(seeds: List<Song>): List<RecommendationCandidate> {
         val results = mutableListOf<RecommendationCandidate>()
-        val knownFamilies = seeds.mapNotNull { it.genre?.let(GenreTaxonomy::familyOf) }.distinct()
+        val knownFamilies = seeds.mapNotNull { it.genre?.lowercase()?.let(GenreTaxonomy::familyOf) }.distinct()
         if (knownFamilies.isEmpty()) return results
 
-        val allSongs = runCatching { musicRepository.getAllSongs() }.getOrDefault(emptyList())
+        val allSongs = runCatching { musicRepository.getAudioFiles().first() }.getOrDefault(emptyList())
         for (family in knownFamilies.take(2)) {
-            val matchingSongs = allSongs.filter { it.genre?.let(GenreTaxonomy::familyOf) == family }
+            val matchingSongs = allSongs.filter { it.genre?.lowercase()?.let(GenreTaxonomy::familyOf) == family }
             matchingSongs.shuffled().take(5).forEach { song ->
                 results.add(
                     RecommendationCandidate(
@@ -161,10 +163,13 @@ class CandidateAggregator @Inject constructor(
     }
 
     private fun normalizeKey(song: Song): String {
-        val mbid = song.mbRecordingId?.takeIf { it.isNotBlank() }
-        if (mbid != null) return "mbid::$mbid"
         val ytid = song.youtubeId?.takeIf { it.isNotBlank() }
         if (ytid != null) return "yt::$ytid"
+        val navId = song.navidromeId?.takeIf { it.isNotBlank() }
+        if (navId != null) return "nav::$navId"
+        val jellyId = song.jellyfinId?.takeIf { it.isNotBlank() }
+        if (jellyId != null) return "jelly::$jellyId"
+        if (song.id.isNotBlank()) return "id::${song.id}"
         return "norm::${song.title.trim().lowercase()}:::${song.artist.trim().lowercase()}"
     }
 }
