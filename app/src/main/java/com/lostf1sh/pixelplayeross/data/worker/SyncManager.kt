@@ -135,6 +135,11 @@ class SyncManager @Inject constructor(
             ExistingPeriodicWorkPolicy.KEEP,
             SyncWorker.periodicMaintenanceWork()
         )
+        workManager.enqueueUniquePeriodicWork(
+            RecommendationWorker.PERIODIC_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            RecommendationWorker.periodicWork()
+        )
     }
 
     /**
