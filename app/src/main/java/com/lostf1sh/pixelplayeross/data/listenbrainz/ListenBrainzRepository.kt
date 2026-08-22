@@ -33,6 +33,7 @@ class InvalidServerUrlException : IllegalArgumentException("Invalid ListenBrainz
 @Singleton
 class ListenBrainzRepository @Inject constructor(
     private val api: ListenBrainzApiService,
+    private val labsApi: ListenBrainzLabsApiService,
     private val listenBrainzDao: ListenBrainzDao,
     private val workManager: WorkManager,
     private val endpoint: ListenBrainzEndpoint,
@@ -296,6 +297,46 @@ class ListenBrainzRepository @Inject constructor(
             ExistingWorkPolicy.APPEND_OR_REPLACE,
             ScrobbleFlushWorker.request(initialDelaySeconds = delaySeconds)
         )
+    }
+
+    private val similarArtistsCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<SimilarArtist>>>()
+
+    /**
+     * Fetches similar artists from ListenBrainz Labs API for a given MusicBrainz Artist ID.
+     * Caches results in-memory for 24 hours to reduce network overhead.
+     * Does not require authentication.
+     */
+    suspend fun getSimilarArtists(mbArtistId: String): List<SimilarArtist> {
+        val trimmed = mbArtistId.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        val cached = similarArtistsCache[trimmed]
+        val now = System.currentTimeMillis()
+        if (cached != null && (now - cached.first) < java.util.concurrent.TimeUnit.HOURS.toMillis(24)) {
+            return cached.second
+        }
+
+        return try {
+            val response = labsApi.getSimilarArtists(trimmed)
+            if (response.isSuccessful) {
+                val items = response.body()?.firstOrNull()?.similarArtists.orEmpty()
+                val mapped = items.map { item ->
+                    SimilarArtist(
+                        mbid = item.similarArtistMbid,
+                        name = item.name,
+                        score = item.score
+                    )
+                }
+                similarArtistsCache[trimmed] = Pair(now, mapped)
+                mapped
+            } else {
+                Timber.tag(TAG).w("Failed to fetch similar artists for %s: code=%d", trimmed, response.code())
+                emptyList()
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Error fetching similar artists for %s", trimmed)
+            emptyList()
+        }
     }
 
     private fun authHeader(token: String) = "Token $token"

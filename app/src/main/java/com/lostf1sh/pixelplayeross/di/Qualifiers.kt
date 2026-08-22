@@ -36,3 +36,11 @@ annotation class AppScope
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class ListenBrainzRetrofit
+
+/**
+ * Qualifier for ListenBrainz Labs Retrofit instance.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ListenBrainzLabsRetrofit
+

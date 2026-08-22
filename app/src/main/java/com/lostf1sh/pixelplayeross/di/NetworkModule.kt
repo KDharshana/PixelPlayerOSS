@@ -2,6 +2,7 @@ package com.lostf1sh.pixelplayeross.di
 
 import com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzApiService
 import com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzEndpoint
+import com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzLabsApiService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -44,5 +45,24 @@ object NetworkModule {
     @Singleton
     fun provideListenBrainzApiService(@ListenBrainzRetrofit retrofit: Retrofit): ListenBrainzApiService {
         return retrofit.create(ListenBrainzApiService::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @ListenBrainzLabsRetrofit
+    fun provideListenBrainzLabsRetrofit(
+        okHttpClient: OkHttpClient
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl(ListenBrainzLabsApiService.DEFAULT_LABS_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideListenBrainzLabsApiService(@ListenBrainzLabsRetrofit retrofit: Retrofit): ListenBrainzLabsApiService {
+        return retrofit.create(ListenBrainzLabsApiService::class.java)
     }
 }
