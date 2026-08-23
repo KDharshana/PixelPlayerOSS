@@ -93,7 +93,7 @@ class SearchStateHolderTest {
             )
         )
 
-        searchStateHolder.initialize(this)
+        searchStateHolder.initialize(backgroundScope)
         searchStateHolder.performSearch("Song")
         advanceUntilIdle()
 
