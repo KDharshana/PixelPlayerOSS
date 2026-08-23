@@ -76,10 +76,21 @@ jobs:
           } > keystore.properties
 
       - name: Run Unit Tests
-        run: ./gradlew :app:testDebugUnitTest
+        run: ./gradlew :app:testDebugUnitTest --info --stacktrace
+
+      - name: Upload Test Results (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: test-results-and-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Assemble Debug APK
-        run: ./gradlew :app:assembleDebug -Ppixelplayer.enableAbiSplits=true
+        run: ./gradlew :app:assembleDebug -Ppixelplayer.enableAbiSplits=true --info --stacktrace
 
       - name: Verify Debug Split APKs
         run: |
