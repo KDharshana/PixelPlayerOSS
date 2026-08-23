@@ -1292,6 +1292,12 @@ class PlayerViewModel @Inject constructor(
     private val _quickPicks = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
     val quickPicks = _quickPicks.asStateFlow()
 
+    val favoriteArtists: StateFlow<Set<String>> = userPreferencesRepository.favoriteArtistsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
+    private val _favoriteArtistsSongs = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
+    val favoriteArtistsSongs: StateFlow<ImmutableList<Song>> = _favoriteArtistsSongs.asStateFlow()
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val keepListeningSongs: StateFlow<ImmutableList<Song>> = playbackHistory
         .flatMapLatest { history ->
@@ -1324,6 +1330,20 @@ class PlayerViewModel @Inject constructor(
                 }
                 if (recs.quickPicks.isNotEmpty()) {
                     _quickPicks.value = recs.quickPicks.toImmutableList()
+                }
+
+                val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
+                if (favArtists.isNotEmpty()) {
+                    val collectedSongs = mutableListOf<Song>()
+                    for (artistName in favArtists.take(8)) {
+                        val songs = runCatching {
+                            youTubeRepository.searchSongsPaginated(artistName).songs.take(2)
+                        }.getOrDefault(emptyList())
+                        collectedSongs.addAll(songs)
+                    }
+                    if (collectedSongs.isNotEmpty()) {
+                        _favoriteArtistsSongs.value = collectedSongs.distinctBy { it.id }.toImmutableList()
+                    }
                 }
             } catch (e: Exception) {
                 Timber.tag("PlayerViewModel").e(e, "Error loading home recommendations")

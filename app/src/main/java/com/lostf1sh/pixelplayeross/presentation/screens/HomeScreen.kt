@@ -92,6 +92,7 @@ import com.lostf1sh.pixelplayeross.presentation.components.DailyMixSection
 import com.lostf1sh.pixelplayeross.presentation.components.HomeGradientTopBar
 import com.lostf1sh.pixelplayeross.presentation.components.HomeOptionsBottomSheet
 import com.lostf1sh.pixelplayeross.presentation.components.HorizontalAlbumCarouselSection
+import com.lostf1sh.pixelplayeross.presentation.components.HorizontalArtistCarouselSection
 import com.lostf1sh.pixelplayeross.presentation.components.HorizontalPlaylistCarouselSection
 import com.lostf1sh.pixelplayeross.presentation.components.HorizontalSongCarouselSection
 import com.lostf1sh.pixelplayeross.presentation.components.MiniPlayerHeight
@@ -159,6 +160,8 @@ fun HomeScreen(
     val mixedForYouPlaylists by playerViewModel.mixedForYouPlaylists.collectAsStateWithLifecycle()
     val newAlbums by playerViewModel.newAlbums.collectAsStateWithLifecycle()
     val quickPicks by playerViewModel.quickPicks.collectAsStateWithLifecycle()
+    val favoriteArtists by playerViewModel.favoriteArtists.collectAsStateWithLifecycle()
+    val favoriteArtistsSongs by playerViewModel.favoriteArtistsSongs.collectAsStateWithLifecycle()
     var selectedHomeFilter by rememberSaveable { mutableStateOf(HomeFilter.ALL) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -516,6 +519,40 @@ fun HomeScreen(
                             albums = newAlbums,
                             onAlbumClick = { album ->
                                 navController.navigateSafely(Screen.AlbumDetail.createRoute(album.id))
+                            }
+                        )
+                    }
+                }
+
+                if (favoriteArtists.isNotEmpty()) {
+                    item(
+                        key = "favorite_artists_section",
+                        contentType = "favorite_artists_section"
+                    ) {
+                        HorizontalArtistCarouselSection(
+                            title = stringResource(R.string.home_section_favorite_artists),
+                            subtitle = stringResource(R.string.home_section_favorite_artists_subtitle),
+                            artists = favoriteArtists.toList(),
+                            onArtistClick = { artistName ->
+                                navController.navigateSafely(Screen.Search.createRoute(artistName))
+                            }
+                        )
+                    }
+                }
+
+                if (favoriteArtistsSongs.isNotEmpty()) {
+                    item(
+                        key = "favorite_artists_songs_section",
+                        contentType = "favorite_artists_songs_section"
+                    ) {
+                        HorizontalSongCarouselSection(
+                            title = stringResource(R.string.home_favorite_artists_mix_title),
+                            subtitle = "Top songs from your favorite artists",
+                            songs = favoriteArtistsSongs,
+                            currentPlayingSongId = currentSong?.id,
+                            isPlaying = isPlaying,
+                            onSongClick = { song ->
+                                playerViewModel.showAndPlaySong(song, favoriteArtistsSongs, "Favorite Artists Mix")
                             }
                         )
                     }

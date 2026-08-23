@@ -46,7 +46,8 @@ class CandidateAggregatorTest {
             youTubeRepository = mockk<YouTubeRepository>(relaxed = true),
             listenBrainzRepository = mockk<ListenBrainzRepository>(relaxed = true),
             musicRepository = mockk<MusicRepository>(relaxed = true),
-            itemEmbeddingStore = mockk<ItemEmbeddingStore>(relaxed = true)
+            itemEmbeddingStore = mockk<ItemEmbeddingStore>(relaxed = true),
+            userPreferencesRepository = mockk(relaxed = true)
         )
 
         val deduplicated = aggregator.deduplicateCandidates(listOf(candidateLow, candidateHigh))

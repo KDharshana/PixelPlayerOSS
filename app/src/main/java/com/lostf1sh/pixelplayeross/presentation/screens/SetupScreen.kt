@@ -63,6 +63,9 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -77,17 +80,21 @@ import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.RoundedCorner
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
-
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -143,7 +150,9 @@ import com.lostf1sh.pixelplayeross.presentation.components.BackupModuleSelection
 import com.lostf1sh.pixelplayeross.presentation.components.subcomps.MaterialYouVectorDrawable
 import com.lostf1sh.pixelplayeross.presentation.components.subcomps.SineWaveLine
 import com.lostf1sh.pixelplayeross.presentation.components.FileExplorerDialog
+import com.lostf1sh.pixelplayeross.presentation.components.SmartImage
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.DirectoryEntry
+import com.lostf1sh.pixelplayeross.presentation.viewmodel.SetupArtistItem
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SetupEvent
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SetupUiState
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SetupViewModel
@@ -378,6 +387,11 @@ fun SetupScreen(
                         onExternalLyricsChanged = setupViewModel::setExternalLyricsEnabled,
                         onExternalArtistImagesChanged = setupViewModel::setExternalArtistImagesEnabled
                     )
+                    SetupPage.ArtistSelection -> ArtistSelectionPage(
+                        uiState = uiState,
+                        onToggleFavoriteArtist = setupViewModel::toggleFavoriteArtist,
+                        onSearchQueryChanged = setupViewModel::setArtistSearchQuery
+                    )
                     SetupPage.Finish -> FinishPage()
                     SetupPage.LibraryLayout -> LibraryLayoutPage(
                         uiState = uiState,
@@ -535,6 +549,7 @@ sealed class SetupPage {
     object BackupRestore : SetupPage()
     object DirectorySelection : SetupPage()
     object ExternalServices : SetupPage()
+    object ArtistSelection : SetupPage()
     object ThemeSelection : SetupPage()
     object NotificationsPermission : SetupPage()
     object AlarmsPermission : SetupPage()
@@ -556,6 +571,7 @@ private fun buildSetupPages(sdkInt: Int): List<SetupPage> {
     pages += SetupPage.BackupRestore
     pages += SetupPage.DirectorySelection
     pages += SetupPage.ExternalServices
+    pages += SetupPage.ArtistSelection
     pages += SetupPage.ThemeSelection
     pages += SetupPage.LibraryLayout
     pages += SetupPage.NavBarLayout
@@ -597,6 +613,9 @@ private fun isPermissionGateSatisfied(
                     context,
                     Manifest.permission.POST_NOTIFICATIONS
                 ) == PackageManager.PERMISSION_GRANTED
+        }
+        SetupPage.ArtistSelection -> {
+            uiState.hasMinimumFavoriteArtists
         }
         else -> true
     }
@@ -1218,6 +1237,245 @@ fun ExternalServicesPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ArtistSelectionPage(
+    uiState: SetupUiState,
+    onToggleFavoriteArtist: (String) -> Unit,
+    onSearchQueryChanged: (String) -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                text = stringResource(R.string.setup_favorite_artists_title),
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontFamily = RoundedSans,
+                    fontSize = 30.sp
+                ),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.setup_favorite_artists_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Counter Badge
+            val selectedCount = uiState.selectedFavoriteArtists.size
+            val hasMin = selectedCount >= 5
+            Surface(
+                shape = CircleShape,
+                color = if (hasMin) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = if (hasMin) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                tonalElevation = 2.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (hasMin) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        text = if (hasMin) {
+                            stringResource(R.string.setup_favorite_artists_selected_counter, selectedCount)
+                        } else {
+                            stringResource(R.string.setup_favorite_artists_min_counter, 5, selectedCount)
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Search Bar
+            OutlinedTextField(
+                value = uiState.artistSearchQuery,
+                onValueChange = onSearchQueryChanged,
+                placeholder = {
+                    Text(stringResource(R.string.setup_favorite_artists_search_hint))
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = stringResource(R.string.search)
+                    )
+                },
+                trailingIcon = {
+                    if (uiState.isSearchingArtists) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else if (uiState.artistSearchQuery.isNotBlank()) {
+                        IconButton(onClick = { onSearchQueryChanged("") }) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = stringResource(R.string.cancel)
+                            )
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(20.dp),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color.Transparent
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Artists Grid
+        val isSearching = uiState.artistSearchQuery.isNotBlank()
+        val displayArtists = if (isSearching) uiState.artistSearchResults else uiState.popularArtists
+
+        if (isSearching && displayArtists.isEmpty() && !uiState.isSearchingArtists) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.setup_favorite_artists_no_results, uiState.artistSearchQuery),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                items(
+                    items = displayArtists,
+                    key = { it.name }
+                ) { artist ->
+                    val isSelected = uiState.selectedFavoriteArtists.contains(artist.name)
+                    ArtistSelectionCard(
+                        artist = artist,
+                        isSelected = isSelected,
+                        onToggle = { onToggleFavoriteArtist(artist.name) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtistSelectionCard(
+    artist: SetupArtistItem,
+    isSelected: Boolean,
+    onToggle: () -> Unit
+) {
+    Surface(
+        onClick = onToggle,
+        shape = RoundedCornerShape(18.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainer
+        },
+        border = if (isSelected) {
+            androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        },
+        tonalElevation = if (isSelected) 4.dp else 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(68.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                SmartImage(
+                    model = artist.imageUrl,
+                    contentDescription = artist.name,
+                    shape = CircleShape,
+                    placeholderResId = R.drawable.ic_music_placeholder,
+                    errorResId = R.drawable.ic_music_placeholder,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                )
+
+                if (isSelected) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.TopEnd
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.size(22.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = artist.name,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                ),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
             )
         }
     }

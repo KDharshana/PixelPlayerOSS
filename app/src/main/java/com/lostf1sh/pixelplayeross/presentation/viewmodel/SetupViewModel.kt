@@ -32,7 +32,45 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-import java.io.File
+import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
+
+data class SetupArtistItem(
+    val name: String,
+    val imageUrl: String? = null
+)
+
+val DEFAULT_POPULAR_ARTISTS = listOf(
+    SetupArtistItem("Taylor Swift"),
+    SetupArtistItem("The Weeknd"),
+    SetupArtistItem("Drake"),
+    SetupArtistItem("Billie Eilish"),
+    SetupArtistItem("Coldplay"),
+    SetupArtistItem("Eminem"),
+    SetupArtistItem("Kendrick Lamar"),
+    SetupArtistItem("Ed Sheeran"),
+    SetupArtistItem("Ariana Grande"),
+    SetupArtistItem("Post Malone"),
+    SetupArtistItem("Bruno Mars"),
+    SetupArtistItem("Dua Lipa"),
+    SetupArtistItem("Queen"),
+    SetupArtistItem("BTS"),
+    SetupArtistItem("Bad Bunny"),
+    SetupArtistItem("Imagine Dragons"),
+    SetupArtistItem("Rihanna"),
+    SetupArtistItem("Justin Bieber"),
+    SetupArtistItem("Lady Gaga"),
+    SetupArtistItem("Travis Scott"),
+    SetupArtistItem("Beyoncé"),
+    SetupArtistItem("Harry Styles"),
+    SetupArtistItem("Linkin Park"),
+    SetupArtistItem("Maroon 5"),
+    SetupArtistItem("Adele"),
+    SetupArtistItem("Arctic Monkeys"),
+    SetupArtistItem("Katy Perry"),
+    SetupArtistItem("Shawn Mendes"),
+    SetupArtistItem("Lana Del Rey"),
+    SetupArtistItem("David Guetta")
+)
 
 data class SetupUiState(
     val mediaPermissionGranted: Boolean = false,
@@ -49,8 +87,16 @@ data class SetupUiState(
     val isInspectingBackup: Boolean = false,
     val isRestoringBackup: Boolean = false,
     val restorePlan: RestorePlan? = null,
-    val backupTransferProgress: BackupTransferProgressUpdate? = null
+    val backupTransferProgress: BackupTransferProgressUpdate? = null,
+    val selectedFavoriteArtists: Set<String> = emptySet(),
+    val popularArtists: List<SetupArtistItem> = DEFAULT_POPULAR_ARTISTS,
+    val artistSearchQuery: String = "",
+    val artistSearchResults: List<SetupArtistItem> = emptyList(),
+    val isSearchingArtists: Boolean = false
 ) {
+    val hasMinimumFavoriteArtists: Boolean
+        get() = selectedFavoriteArtists.size >= 5
+
     val allPermissionsGranted: Boolean
         get() {
             val mediaOk = mediaPermissionGranted
@@ -71,6 +117,7 @@ class SetupViewModel @Inject constructor(
     private val syncManager: SyncManager,
     private val backupManager: BackupManager,
     private val musicRepository: MusicRepository,
+    private val youTubeRepository: YouTubeRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -416,7 +463,56 @@ class SetupViewModel @Inject constructor(
         }
     }
 
+    private var artistSearchJob: Job? = null
+
+    fun toggleFavoriteArtist(artistName: String) {
+        _uiState.update { state ->
+            val current = state.selectedFavoriteArtists
+            val updated = if (current.contains(artistName)) {
+                current - artistName
+            } else {
+                current + artistName
+            }
+            state.copy(selectedFavoriteArtists = updated)
+        }
+    }
+
+    fun setArtistSearchQuery(query: String) {
+        _uiState.update { it.copy(artistSearchQuery = query) }
+        artistSearchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(artistSearchResults = emptyList(), isSearchingArtists = false) }
+            return
+        }
+        artistSearchJob = viewModelScope.launch {
+            _uiState.update { it.copy(isSearchingArtists = true) }
+            val result = runCatching {
+                youTubeRepository.searchAllPaginated(
+                    query = query,
+                    filterType = com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ARTISTS
+                )
+            }.getOrNull()
+            val artistItems = result?.items?.mapNotNull { item ->
+                if (item is com.lostf1sh.pixelplayeross.data.model.SearchResultItem.ArtistItem) {
+                    SetupArtistItem(name = item.artist.name, imageUrl = item.artist.imageUrl)
+                } else null
+            } ?: emptyList()
+            _uiState.update { it.copy(artistSearchResults = artistItems, isSearchingArtists = false) }
+        }
+    }
+
+    fun saveFavoriteArtists() {
+        val selected = _uiState.value.selectedFavoriteArtists
+        viewModelScope.launch {
+            userPreferencesRepository.setFavoriteArtists(selected)
+        }
+    }
+
     private suspend fun completeSetup(syncAfter: Boolean) {
+        val selected = _uiState.value.selectedFavoriteArtists
+        if (selected.isNotEmpty()) {
+            userPreferencesRepository.setFavoriteArtists(selected)
+        }
         userPreferencesRepository.setInitialSetupDone(true)
         if (syncAfter) {
             syncManager.fullSync(deepScan = false)

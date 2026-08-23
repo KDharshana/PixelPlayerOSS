@@ -433,3 +433,92 @@ fun HorizontalAlbumCarouselSection(
     }
 }
 
+@Composable
+fun HorizontalArtistCarouselSection(
+    title: String,
+    subtitle: String? = null,
+    artists: List<String>,
+    onArtistClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (artists.isEmpty()) return
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        HomeSectionHeader(
+            title = title,
+            subtitle = subtitle
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            items(
+                items = artists,
+                key = { it }
+            ) { artistName ->
+                HomeArtistCard(
+                    artistName = artistName,
+                    onClick = { onArtistClick(artistName) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeArtistCard(
+    artistName: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .width(116.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center
+            ) {
+                SmartImage(
+                    model = null,
+                    contentDescription = artistName,
+                    shape = CircleShape,
+                    placeholderResId = R.drawable.ic_music_placeholder,
+                    errorResId = R.drawable.ic_music_placeholder,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = artistName,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+

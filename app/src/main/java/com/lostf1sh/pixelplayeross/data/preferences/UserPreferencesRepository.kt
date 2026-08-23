@@ -101,6 +101,7 @@ constructor(
         val ALBUM_ART_PALETTE_STYLE = stringPreferencesKey("album_art_palette_style_v1")
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         val FAVORITE_SONG_IDS = stringSetPreferencesKey("favorite_song_ids")
+        val FAVORITE_ARTISTS = stringSetPreferencesKey("favorite_artists")
         val USER_PLAYLISTS = stringPreferencesKey("user_playlists_json_v1")
         val PLAYLIST_SONG_ORDER_MODES = stringPreferencesKey("playlist_song_order_modes")
 
@@ -884,6 +885,12 @@ constructor(
                 preferences[PreferencesKeys.FAVORITE_SONG_IDS] ?: emptySet()
             }
 
+    val favoriteArtistsFlow: Flow<Set<String>> =
+            dataStore.data
+                    .map { preferences ->
+                preferences[PreferencesKeys.FAVORITE_ARTISTS] ?: emptySet()
+            }
+
     val playlistSongOrderModesFlow: Flow<Map<String, String>> =
             dataStore.data.map { preferences ->
                 val serializedModes = preferences[PreferencesKeys.PLAYLIST_SONG_ORDER_MODES]
@@ -1010,6 +1017,33 @@ constructor(
     suspend fun clearFavoriteSongIds() {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.FAVORITE_SONG_IDS] = emptySet()
+        }
+    }
+
+    suspend fun setFavoriteArtists(artists: Set<String>) {
+        dataStore.edit { preferences ->
+            if (artists.isEmpty()) {
+                preferences.remove(PreferencesKeys.FAVORITE_ARTISTS)
+            } else {
+                preferences[PreferencesKeys.FAVORITE_ARTISTS] = artists
+            }
+        }
+    }
+
+    suspend fun toggleFavoriteArtist(artistName: String) {
+        dataStore.edit { preferences ->
+            val current = preferences[PreferencesKeys.FAVORITE_ARTISTS] ?: emptySet()
+            preferences[PreferencesKeys.FAVORITE_ARTISTS] = if (current.contains(artistName)) {
+                current - artistName
+            } else {
+                current + artistName
+            }
+        }
+    }
+
+    suspend fun clearFavoriteArtists() {
+        dataStore.edit { preferences ->
+            preferences.remove(PreferencesKeys.FAVORITE_ARTISTS)
         }
     }
 

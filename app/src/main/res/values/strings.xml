@@ -272,4 +272,14 @@
     <string name="musicbrainz_match_score">Match confidence: %1$d%%</string>
     <string name="musicbrainz_applied">MusicBrainz identifiers saved. Missing year and placeholder names were enriched.</string>
 
+    <string name="setup_favorite_artists_title">Favorite Artists</string>
+    <string name="setup_favorite_artists_subtitle">Pick at least 5 artists you love to personalize your mixes and recommendations.</string>
+    <string name="setup_favorite_artists_search_hint">Search any artist…</string>
+    <string name="setup_favorite_artists_min_counter">Select at least %1$d artists (%2$d/%1$d)</string>
+    <string name="setup_favorite_artists_selected_counter">%1$d artists selected</string>
+    <string name="setup_favorite_artists_no_results">No artists found for \"%1$s\"</string>
+    <string name="home_section_favorite_artists">Your Favorite Artists</string>
+    <string name="home_section_favorite_artists_subtitle">Featured music and mixes from artists you love</string>
+    <string name="home_favorite_artists_mix_title">Favorite Artists Mix</string>
+
 </resources>

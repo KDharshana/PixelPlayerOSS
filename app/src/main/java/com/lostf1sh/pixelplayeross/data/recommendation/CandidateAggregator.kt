@@ -3,6 +3,7 @@ package com.lostf1sh.pixelplayeross.data.recommendation
 import com.lostf1sh.pixelplayeross.data.listenbrainz.ListenBrainzRepository
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.playlist.nlp.GenreTaxonomy
+import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 import kotlinx.coroutines.async
@@ -19,13 +20,15 @@ import javax.inject.Singleton
  * 2. ListenBrainz Labs similar-artists graph (LB_SIMILAR_ARTIST)
  * 3. Library genre taxonomy expansion (GENRE_EXPANSION)
  * 4. On-device session co-occurrences (LIBRARY_COOCCURRENCE)
+ * 5. Selected favorite artists
  */
 @Singleton
 class CandidateAggregator @Inject constructor(
     private val youTubeRepository: YouTubeRepository,
     private val listenBrainzRepository: ListenBrainzRepository,
     private val musicRepository: MusicRepository,
-    private val itemEmbeddingStore: ItemEmbeddingStore
+    private val itemEmbeddingStore: ItemEmbeddingStore,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) {
 
     companion object {
@@ -36,13 +39,15 @@ class CandidateAggregator @Inject constructor(
         seedSongs: List<Song>,
         limit: Int = 100
     ): List<RecommendationCandidate> = coroutineScope {
-        if (seedSongs.isEmpty()) return@coroutineScope emptyList()
+        val favoriteArtists = runCatching { userPreferencesRepository.favoriteArtistsFlow.first() }.getOrDefault(emptySet())
+        if (seedSongs.isEmpty() && favoriteArtists.isEmpty()) return@coroutineScope emptyList()
 
         val topSeeds = seedSongs.take(5)
         val ytDeferred = async { collectYouTubeRadioCandidates(topSeeds) }
         val lbDeferred = async { collectListenBrainzCandidates(topSeeds) }
         val genreDeferred = async { collectGenreCandidates(topSeeds) }
         val cooccurDeferred = async { collectCooccurrenceCandidates(topSeeds) }
+        val favDeferred = async { collectFavoriteArtistCandidates(favoriteArtists) }
 
         val ytCandidates = runCatching { ytDeferred.await() }
             .onFailure { Timber.tag(TAG).w(it, "YouTube candidate collection failed") }
@@ -60,8 +65,30 @@ class CandidateAggregator @Inject constructor(
             .onFailure { Timber.tag(TAG).w(it, "Cooccurrence candidate collection failed") }
             .getOrDefault(emptyList())
 
-        val allCandidates = cooccurCandidates + ytCandidates + lbCandidates + genreCandidates
+        val favCandidates = runCatching { favDeferred.await() }
+            .onFailure { Timber.tag(TAG).w(it, "Favorite artist candidate collection failed") }
+            .getOrDefault(emptyList())
+
+        val allCandidates = favCandidates + cooccurCandidates + ytCandidates + lbCandidates + genreCandidates
         deduplicateCandidates(allCandidates).take(limit)
+    }
+
+    private suspend fun collectFavoriteArtistCandidates(favoriteArtists: Set<String>): List<RecommendationCandidate> {
+        val results = mutableListOf<RecommendationCandidate>()
+        for (artist in favoriteArtists.take(5)) {
+            val songs = runCatching { youTubeRepository.searchSongsPaginated(artist).songs }.getOrDefault(emptyList())
+            for (song in songs.take(3)) {
+                results.add(
+                    RecommendationCandidate(
+                        song = song,
+                        sourceType = CandidateSourceType.LB_SIMILAR_ARTIST,
+                        sourceStrength = 0.85,
+                        seedSongId = null
+                    )
+                )
+            }
+        }
+        return results
     }
 
     private suspend fun collectCooccurrenceCandidates(seeds: List<Song>): List<RecommendationCandidate> {

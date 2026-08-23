@@ -128,4 +128,29 @@ class UserPreferencesRepositoryTest {
             tempDir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `favorite artists persist and update`() = runTest {
+        val tempDir = Files.createTempDirectory("user-preferences-repository-test")
+        try {
+            val repository = UserPreferencesRepository(
+                dataStore = PreferenceDataStoreFactory.create(
+                    scope = backgroundScope,
+                    produceFile = { tempDir.resolve("settings.preferences_pb").toFile() }
+                ),
+                json = Json
+            )
+
+            assertTrue(repository.favoriteArtistsFlow.first().isEmpty())
+
+            val artists = setOf("Taylor Swift", "The Weeknd", "Billie Eilish", "Coldplay", "Eminem")
+            repository.setFavoriteArtists(artists)
+            assertEquals(
+                artists,
+                repository.favoriteArtistsFlow.first()
+            )
+        } finally {
+            tempDir.toFile().deleteRecursively()
+        }
+    }
 }
