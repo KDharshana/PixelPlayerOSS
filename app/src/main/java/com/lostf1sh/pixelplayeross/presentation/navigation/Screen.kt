@@ -31,7 +31,7 @@ sealed class Screen(val route: String) {
             if (highlightKey != null) "nav_bar_corner_radius?highlightKey=$highlightKey" else "nav_bar_corner_radius"
     }
     object PlaylistDetail : Screen("playlist_detail/{playlistId}") {
-        fun createRoute(playlistId: String) = "playlist_detail/$playlistId"
+        fun createRoute(playlistId: String) = "playlist_detail/${Uri.encode(playlistId)}"
     }
 
     object  DailyMixScreen : Screen("daily_mix")
@@ -42,7 +42,7 @@ sealed class Screen(val route: String) {
             if (highlightKey != null) "duplicates?highlightKey=$highlightKey" else "duplicates"
     }
     object GenreDetail : Screen("genre_detail/{genreId}") {
-        fun createRoute(genreId: String) = "genre_detail/$genreId"
+        fun createRoute(genreId: String) = "genre_detail/${Uri.encode(genreId)}"
     }
     object DJSpace : Screen("dj_space")
     object AlbumDetail : Screen("album_detail/{albumId}") {

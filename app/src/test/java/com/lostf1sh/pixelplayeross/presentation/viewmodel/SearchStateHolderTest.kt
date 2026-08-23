@@ -8,7 +8,7 @@ import com.lostf1sh.pixelplayeross.data.model.SearchResultItem
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
-import com.lostf1sh.pixelplayeross.data.youtube.YouTubeSearchResult
+
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -76,7 +76,7 @@ class SearchStateHolderTest {
         )
 
         coEvery { musicRepository.searchAll("Song", SearchFilterType.ALL) } returns flowOf(localResults)
-        coEvery { youTubeRepository.searchAllPaginated("Song", SearchFilterType.ALL) } returns YouTubeSearchResult(emptyList(), null)
+        coEvery { youTubeRepository.searchAllPaginated("Song", SearchFilterType.ALL) } returns YouTubeRepository.YouTubeMultiPageResult(emptyList(), null)
         coEvery { engagementDao.getAllEngagements() } returns listOf(
             SongEngagementEntity(
                 songId = "1",

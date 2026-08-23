@@ -401,7 +401,8 @@ class YouTubeRepository @Inject constructor(
     private val onlineAlbumsCache = java.util.concurrent.ConcurrentHashMap<Long, InnertubeAlbum>()
 
     private fun InnertubeAlbum.toDomainAlbum(): com.lostf1sh.pixelplayeross.data.model.Album {
-        val calculatedId = -Math.abs(browseId.hashCode().toLong().takeIf { it != 0L } ?: 1L)
+        val hash = browseId.hashCode().toLong() and 0xFFFFFFFFL
+        val calculatedId = -(if (hash != 0L) hash else 1L)
         onlineAlbumsCache[calculatedId] = this
         return com.lostf1sh.pixelplayeross.data.model.Album(
             id = calculatedId,
@@ -416,7 +417,8 @@ class YouTubeRepository @Inject constructor(
     }
 
     private fun InnertubeArtist.toDomainArtist(): com.lostf1sh.pixelplayeross.data.model.Artist {
-        val calculatedId = -Math.abs(browseId.hashCode().toLong().takeIf { it != 0L } ?: 1L)
+        val hash = browseId.hashCode().toLong() and 0xFFFFFFFFL
+        val calculatedId = -(if (hash != 0L) hash else 1L)
         onlineArtistsCache[calculatedId] = this
         return com.lostf1sh.pixelplayeross.data.model.Artist(
             id = calculatedId,
