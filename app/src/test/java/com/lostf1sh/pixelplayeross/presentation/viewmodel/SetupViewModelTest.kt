@@ -164,4 +164,35 @@ class SetupViewModelTest {
         assertEquals(1, viewModel.uiState.value.artistSearchResults.size)
         assertEquals("Dua Lipa", viewModel.uiState.value.artistSearchResults.first().name)
     }
+
+    @Test
+    fun `searchArtists deduplicates duplicate artist names and assigns unique ids`() = runTest(testDispatcher) {
+        coEvery {
+            youTubeRepository.searchAllPaginated(query = "IMA", filterType = com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ARTISTS)
+        } returns YouTubeRepository.YouTubeMultiPageResult(
+            items = listOf(
+                SearchResultItem.ArtistItem(
+                    Artist(id = 1L, name = "IMA", songCount = 10, imageUrl = "https://img/ima1.jpg")
+                ),
+                SearchResultItem.ArtistItem(
+                    Artist(id = 2L, name = "IMA", songCount = 5, imageUrl = "https://img/ima2.jpg")
+                ),
+                SearchResultItem.ArtistItem(
+                    Artist(id = 3L, name = "Imagine Dragons", songCount = 100, imageUrl = "https://img/id.jpg")
+                )
+            ),
+            continuationToken = null
+        )
+
+        val viewModel = createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.setArtistSearchQuery("IMA")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val results = viewModel.uiState.value.artistSearchResults
+        assertEquals(2, results.size)
+        assertEquals("IMA", results[0].name)
+        assertEquals("Imagine Dragons", results[1].name)
+    }
 }

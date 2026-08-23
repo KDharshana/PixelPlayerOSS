@@ -36,41 +36,42 @@ import java.io.File
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 
 data class SetupArtistItem(
+    val id: String = name,
     val name: String,
     val imageUrl: String? = null
 )
 
 val DEFAULT_POPULAR_ARTISTS = listOf(
-    SetupArtistItem("Taylor Swift"),
-    SetupArtistItem("The Weeknd"),
-    SetupArtistItem("Drake"),
-    SetupArtistItem("Billie Eilish"),
-    SetupArtistItem("Coldplay"),
-    SetupArtistItem("Eminem"),
-    SetupArtistItem("Kendrick Lamar"),
-    SetupArtistItem("Ed Sheeran"),
-    SetupArtistItem("Ariana Grande"),
-    SetupArtistItem("Post Malone"),
-    SetupArtistItem("Bruno Mars"),
-    SetupArtistItem("Dua Lipa"),
-    SetupArtistItem("Queen"),
-    SetupArtistItem("BTS"),
-    SetupArtistItem("Bad Bunny"),
-    SetupArtistItem("Imagine Dragons"),
-    SetupArtistItem("Rihanna"),
-    SetupArtistItem("Justin Bieber"),
-    SetupArtistItem("Lady Gaga"),
-    SetupArtistItem("Travis Scott"),
-    SetupArtistItem("Beyoncé"),
-    SetupArtistItem("Harry Styles"),
-    SetupArtistItem("Linkin Park"),
-    SetupArtistItem("Maroon 5"),
-    SetupArtistItem("Adele"),
-    SetupArtistItem("Arctic Monkeys"),
-    SetupArtistItem("Katy Perry"),
-    SetupArtistItem("Shawn Mendes"),
-    SetupArtistItem("Lana Del Rey"),
-    SetupArtistItem("David Guetta")
+    SetupArtistItem(id = "taylor_swift", name = "Taylor Swift"),
+    SetupArtistItem(id = "the_weeknd", name = "The Weeknd"),
+    SetupArtistItem(id = "drake", name = "Drake"),
+    SetupArtistItem(id = "billie_eilish", name = "Billie Eilish"),
+    SetupArtistItem(id = "coldplay", name = "Coldplay"),
+    SetupArtistItem(id = "eminem", name = "Eminem"),
+    SetupArtistItem(id = "kendrick_lamar", name = "Kendrick Lamar"),
+    SetupArtistItem(id = "ed_sheeran", name = "Ed Sheeran"),
+    SetupArtistItem(id = "ariana_grande", name = "Ariana Grande"),
+    SetupArtistItem(id = "post_malone", name = "Post Malone"),
+    SetupArtistItem(id = "bruno_mars", name = "Bruno Mars"),
+    SetupArtistItem(id = "dua_lipa", name = "Dua Lipa"),
+    SetupArtistItem(id = "queen", name = "Queen"),
+    SetupArtistItem(id = "bts", name = "BTS"),
+    SetupArtistItem(id = "bad_bunny", name = "Bad Bunny"),
+    SetupArtistItem(id = "imagine_dragons", name = "Imagine Dragons"),
+    SetupArtistItem(id = "rihanna", name = "Rihanna"),
+    SetupArtistItem(id = "justin_bieber", name = "Justin Bieber"),
+    SetupArtistItem(id = "lady_gaga", name = "Lady Gaga"),
+    SetupArtistItem(id = "travis_scott", name = "Travis Scott"),
+    SetupArtistItem(id = "beyonce", name = "Beyoncé"),
+    SetupArtistItem(id = "harry_styles", name = "Harry Styles"),
+    SetupArtistItem(id = "linkin_park", name = "Linkin Park"),
+    SetupArtistItem(id = "maroon_5", name = "Maroon 5"),
+    SetupArtistItem(id = "adele", name = "Adele"),
+    SetupArtistItem(id = "arctic_monkeys", name = "Arctic Monkeys"),
+    SetupArtistItem(id = "katy_perry", name = "Katy Perry"),
+    SetupArtistItem(id = "shawn_mendes", name = "Shawn Mendes"),
+    SetupArtistItem(id = "lana_del_rey", name = "Lana Del Rey"),
+    SetupArtistItem(id = "david_guetta", name = "David Guetta")
 )
 
 data class SetupUiState(
@@ -493,11 +494,18 @@ class SetupViewModel @Inject constructor(
                     filterType = com.lostf1sh.pixelplayeross.data.model.SearchFilterType.ARTISTS
                 )
             }.getOrNull()
-            val artistItems = result?.items?.mapNotNull { item ->
+            val artistItems = result?.items?.mapIndexedNotNull { index, item ->
                 if (item is com.lostf1sh.pixelplayeross.data.model.SearchResultItem.ArtistItem) {
-                    SetupArtistItem(name = item.artist.name, imageUrl = item.artist.imageUrl)
+                    val trimmed = item.artist.name.trim()
+                    if (trimmed.isNotBlank()) {
+                        SetupArtistItem(
+                            id = "${item.artist.id}_${trimmed}_$index",
+                            name = trimmed,
+                            imageUrl = item.artist.imageUrl
+                        )
+                    } else null
                 } else null
-            } ?: emptyList()
+            }?.distinctBy { it.name.lowercase().trim() } ?: emptyList()
             _uiState.update { it.copy(artistSearchResults = artistItems, isSearchingArtists = false) }
         }
     }

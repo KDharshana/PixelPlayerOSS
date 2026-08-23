@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -261,6 +263,8 @@ fun HorizontalSongCarouselSection(
 ) {
     if (songs.isEmpty()) return
 
+    val distinctSongs = remember(songs) { songs.distinctBy { it.id } }
+
     Column(modifier = modifier.fillMaxWidth()) {
         HomeSectionHeader(
             title = title,
@@ -273,10 +277,10 @@ fun HorizontalSongCarouselSection(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(
-                items = songs,
-                key = { it.id }
-            ) { song ->
+            itemsIndexed(
+                items = distinctSongs,
+                key = { index, song -> "${song.id}_$index" }
+            ) { _, song ->
                 HomeSongCard(
                     song = song,
                     isCurrentSong = currentPlayingSongId == song.id,
@@ -298,6 +302,8 @@ fun HorizontalPlaylistCarouselSection(
 ) {
     if (playlists.isEmpty()) return
 
+    val distinctPlaylists = remember(playlists) { playlists.distinctBy { it.id } }
+
     Column(modifier = modifier.fillMaxWidth()) {
         HomeSectionHeader(
             title = title,
@@ -310,10 +316,10 @@ fun HorizontalPlaylistCarouselSection(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(
-                items = playlists,
-                key = { it.id }
-            ) { playlist ->
+            itemsIndexed(
+                items = distinctPlaylists,
+                key = { index, playlist -> "${playlist.id}_$index" }
+            ) { _, playlist ->
                 HomePlaylistCard(
                     playlist = playlist,
                     onClick = { onPlaylistClick(playlist) }
@@ -409,6 +415,8 @@ fun HorizontalAlbumCarouselSection(
 ) {
     if (albums.isEmpty()) return
 
+    val distinctAlbums = remember(albums) { albums.distinctBy { it.id } }
+
     Column(modifier = modifier.fillMaxWidth()) {
         HomeSectionHeader(
             title = title,
@@ -421,10 +429,10 @@ fun HorizontalAlbumCarouselSection(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(
-                items = albums,
-                key = { it.id }
-            ) { album ->
+            itemsIndexed(
+                items = distinctAlbums,
+                key = { index, album -> "${album.id}_$index" }
+            ) { _, album ->
                 HomeAlbumCard(
                     album = album,
                     onClick = { onAlbumClick(album) }
@@ -444,6 +452,8 @@ fun HorizontalArtistCarouselSection(
 ) {
     if (artists.isEmpty()) return
 
+    val distinctArtists = remember(artists) { artists.distinct() }
+
     Column(modifier = modifier.fillMaxWidth()) {
         HomeSectionHeader(
             title = title,
@@ -456,10 +466,10 @@ fun HorizontalArtistCarouselSection(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(
-                items = artists,
-                key = { it }
-            ) { artistName ->
+            itemsIndexed(
+                items = distinctArtists,
+                key = { index, artistName -> "${artistName}_$index" }
+            ) { _, artistName ->
                 HomeArtistCard(
                     artistName = artistName,
                     onClick = { onArtistClick(artistName) }

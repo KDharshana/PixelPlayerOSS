@@ -1375,6 +1375,9 @@ fun ArtistSelectionPage(
                 )
             }
         } else {
+            val safeArtists = remember(displayArtists) {
+                displayArtists.distinctBy { it.name.lowercase().trim() }
+            }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
@@ -1385,8 +1388,8 @@ fun ArtistSelectionPage(
                     .weight(1f)
             ) {
                 items(
-                    items = displayArtists,
-                    key = { it.name }
+                    items = safeArtists,
+                    key = { it.id }
                 ) { artist ->
                     val isSelected = uiState.selectedFavoriteArtists.contains(artist.name)
                     ArtistSelectionCard(
