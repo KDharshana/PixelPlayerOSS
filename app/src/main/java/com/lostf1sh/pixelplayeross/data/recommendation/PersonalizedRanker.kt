@@ -14,6 +14,20 @@ import javax.inject.Singleton
 @Singleton
 class PersonalizedRanker @Inject constructor() {
 
+    enum class RecommendationMood(
+        val displayName: String,
+        val targetEnergy: Double,
+        val minEnergy: Double = 0.0,
+        val maxEnergy: Double = 1.0
+    ) {
+        ALL("All", targetEnergy = 0.5),
+        CHILL("Chill 🧘", targetEnergy = 0.25, maxEnergy = 0.65),
+        WORKOUT("Workout ⚡", targetEnergy = 0.90, minEnergy = 0.55),
+        HAPPY("Happy 🎉", targetEnergy = 0.70, minEnergy = 0.40),
+        FOCUS("Focus 📚", targetEnergy = 0.30, maxEnergy = 0.60),
+        MELANCHOLY("Melancholy 🌧️", targetEnergy = 0.30, maxEnergy = 0.65)
+    }
+
     data class RankingWeights(
         val affinityWeight: Double = 0.30,
         val sourceStrengthWeight: Double = 0.25,
@@ -47,6 +61,7 @@ class PersonalizedRanker @Inject constructor() {
         engagements: Map<String, SongEngagementEntity>,
         favoriteSongIds: Set<String>,
         weights: RankingWeights = RankingWeights(),
+        mood: RecommendationMood = RecommendationMood.ALL,
         random: Random = Random()
     ): List<ScoredCandidate> {
         if (candidates.isEmpty()) return emptyList()
@@ -55,9 +70,16 @@ class PersonalizedRanker @Inject constructor() {
         val maxPlayCount = engagements.values.maxOfOrNull { it.playCount }?.takeIf { it > 0 } ?: 1
         val maxDuration = engagements.values.maxOfOrNull { it.totalPlayDurationMs }?.takeIf { it > 0L } ?: 1L
 
-        return candidates.map { candidate ->
+        return candidates.mapNotNull { candidate ->
             val song = candidate.song
             val stats = engagements[song.id]
+
+            val songEnergy = song.genre?.lowercase()?.let(com.lostf1sh.pixelplayeross.data.playlist.nlp.GenreTaxonomy::energyOf)
+            if (mood != RecommendationMood.ALL && songEnergy != null) {
+                if (songEnergy < mood.minEnergy || songEnergy > mood.maxEnergy) {
+                    return@mapNotNull null
+                }
+            }
 
             val playCountScore = (stats?.playCount?.toDouble() ?: 0.0) / maxPlayCount
             val durationScore = (stats?.totalPlayDurationMs?.toDouble() ?: 0.0) / maxDuration
@@ -81,11 +103,18 @@ class PersonalizedRanker @Inject constructor() {
             val baselineScore = if (stats == null) 0.05 else 0.0
             val noise = random.nextDouble() * 0.005
 
+            val moodBonus = if (mood != RecommendationMood.ALL) {
+                val effectiveEnergy = songEnergy ?: 0.5
+                val diff = kotlin.math.abs(effectiveEnergy - mood.targetEnergy)
+                (1.0 - diff).coerceIn(0.0, 1.0) * 0.35
+            } else 0.0
+
             val finalScore = (affinityScore * weights.affinityWeight) +
                 (sourceStrengthScore * weights.sourceStrengthWeight) +
                 (recencyScore * weights.recencyWeight) +
                 (favoriteScore * weights.favoriteWeight) +
                 (noveltyScore * weights.noveltyWeight) +
+                moodBonus +
                 baselineScore +
                 noise
 

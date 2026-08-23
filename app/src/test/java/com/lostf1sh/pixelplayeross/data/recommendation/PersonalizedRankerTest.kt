@@ -10,7 +10,13 @@ class PersonalizedRankerTest {
 
     private val ranker = PersonalizedRanker()
 
-    private fun testSong(id: String, title: String, artist: String, artistId: Long): Song = Song(
+    private fun testSong(
+        id: String,
+        title: String,
+        artist: String,
+        artistId: Long,
+        genre: String? = null
+    ): Song = Song(
         id = id,
         title = title,
         artist = artist,
@@ -23,7 +29,8 @@ class PersonalizedRankerTest {
         duration = 180000L,
         mimeType = "audio/mpeg",
         bitrate = 320000,
-        sampleRate = 44100
+        sampleRate = 44100,
+        genre = genre
     )
 
     @Test
@@ -81,6 +88,45 @@ class PersonalizedRankerTest {
         assertThat(ranked).hasSize(2)
         assertThat(ranked[0].song.id).isEqualTo("song_completed")
         assertThat(ranked[0].finalScore).isGreaterThan(ranked[1].finalScore)
+    }
+
+    @Test
+    fun `rank filters candidates based on selected mood energy bands`() {
+        val chillSong = testSong(
+            id = "chill_1",
+            title = "Chill Lofi",
+            artist = "Lofi Artist",
+            artistId = 1L,
+            genre = "lo-fi"
+        )
+        val metalSong = testSong(
+            id = "metal_1",
+            title = "Heavy Metal",
+            artist = "Metal Artist",
+            artistId = 2L,
+            genre = "metal"
+        )
+
+        val candidates = listOf(
+            RecommendationCandidate(chillSong, CandidateSourceType.GENRE_EXPANSION),
+            RecommendationCandidate(metalSong, CandidateSourceType.GENRE_EXPANSION)
+        )
+
+        val chillRanked = ranker.rank(
+            candidates = candidates,
+            engagements = emptyMap(),
+            favoriteSongIds = emptySet(),
+            mood = PersonalizedRanker.RecommendationMood.CHILL
+        )
+        assertThat(chillRanked.map { it.song.id }).containsExactly("chill_1")
+
+        val workoutRanked = ranker.rank(
+            candidates = candidates,
+            engagements = emptyMap(),
+            favoriteSongIds = emptySet(),
+            mood = PersonalizedRanker.RecommendationMood.WORKOUT
+        )
+        assertThat(workoutRanked.map { it.song.id }).containsExactly("metal_1")
     }
 
     @Test

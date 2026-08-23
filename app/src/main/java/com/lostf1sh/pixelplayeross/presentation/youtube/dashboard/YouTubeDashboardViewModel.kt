@@ -3,11 +3,13 @@ package com.lostf1sh.pixelplayeross.presentation.youtube.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lostf1sh.pixelplayeross.data.database.EngagementDao
+import com.lostf1sh.pixelplayeross.data.database.SongEngagementEntity
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.network.youtube.InnertubeBrowseSection
 import com.lostf1sh.pixelplayeross.data.recommendation.AdaptiveWeightTuner
 import com.lostf1sh.pixelplayeross.data.recommendation.CandidateAggregator
 import com.lostf1sh.pixelplayeross.data.recommendation.PersonalizedRanker
+import com.lostf1sh.pixelplayeross.data.recommendation.RecommendationCandidate
 import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -26,7 +28,8 @@ sealed interface YouTubeDashboardUiState {
     data class Success(
         val forYou: List<Song>,
         val charts: List<Song>,
-        val sections: List<InnertubeBrowseSection>
+        val sections: List<InnertubeBrowseSection>,
+        val selectedMood: PersonalizedRanker.RecommendationMood = PersonalizedRanker.RecommendationMood.ALL
     ) : YouTubeDashboardUiState
     data class Error(val message: String) : YouTubeDashboardUiState
 }
@@ -44,8 +47,29 @@ class YouTubeDashboardViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<YouTubeDashboardUiState>(YouTubeDashboardUiState.Loading)
     val uiState = _uiState.asStateFlow()
 
+    private val _selectedMood = MutableStateFlow(PersonalizedRanker.RecommendationMood.ALL)
+    val selectedMood = _selectedMood.asStateFlow()
+
+    private var cachedCandidates: List<RecommendationCandidate> = emptyList()
+    private var cachedEngagements: Map<String, SongEngagementEntity> = emptyMap()
+    private var cachedTunedWeights: PersonalizedRanker.RankingWeights = PersonalizedRanker.RankingWeights()
+    private var cachedCharts: List<Song> = emptyList()
+    private var cachedSections: List<InnertubeBrowseSection> = emptyList()
+
     init {
         loadDashboard()
+    }
+
+    fun selectMood(mood: PersonalizedRanker.RecommendationMood) {
+        _selectedMood.value = mood
+        val currentState = _uiState.value
+        if (currentState is YouTubeDashboardUiState.Success) {
+            val forYou = computeForYou(mood)
+            _uiState.value = currentState.copy(
+                forYou = forYou,
+                selectedMood = mood
+            )
+        }
     }
 
     fun loadDashboard() {
@@ -58,7 +82,8 @@ class YouTubeDashboardViewModel @Inject constructor(
                         _uiState.value = YouTubeDashboardUiState.Error(e.message ?: "Failed to load Explore")
                     }
                     .collect { sections ->
-                        val charts = sections.flatMap { it.tracks }.map { track ->
+                        cachedSections = sections
+                        cachedCharts = sections.flatMap { it.tracks }.map { track ->
                             Song(
                                 id = "youtube_${track.videoId}",
                                 title = track.title,
@@ -78,36 +103,32 @@ class YouTubeDashboardViewModel @Inject constructor(
                             )
                         }
 
-                        val forYou = withContext(Dispatchers.IO) {
+                        withContext(Dispatchers.IO) {
                             runCatching {
                                 val allEngagements = engagementDao.getAllEngagements()
-                                if (allEngagements.size < 20) {
-                                    charts.take(20)
-                                } else {
+                                cachedEngagements = allEngagements.associateBy { it.songId }
+                                cachedTunedWeights = adaptiveWeightTuner.computeTunedWeights(allEngagements)
+
+                                if (allEngagements.size >= 20) {
                                     val topSongs = engagementDao.getTopPlayedSongs(10)
                                     val recentSongs = engagementDao.getRecentlyPlayedSongs(10)
                                     val seedIds = (topSongs + recentSongs).map { it.songId }.toSet()
                                     val allAudioSongs = musicRepository.getAudioFiles().first()
                                     val seedSongs = allAudioSongs.filter { it.id in seedIds }
-                                    val candidates = candidateAggregator.collect(seedSongs, limit = 60)
-                                    val engagementsMap = allEngagements.associateBy { it.songId }
-                                    val tunedWeights = adaptiveWeightTuner.computeTunedWeights(allEngagements)
-                                    val ranked = personalizedRanker.rank(
-                                        candidates = candidates,
-                                        engagements = engagementsMap,
-                                        favoriteSongIds = emptySet(),
-                                        weights = tunedWeights
-                                    )
-                                    val selected = personalizedRanker.pickWithDiversity(ranked, emptySet(), limit = 20)
-                                    if (selected.isNotEmpty()) selected else charts.take(20)
+                                    cachedCandidates = candidateAggregator.collect(seedSongs, limit = 60)
+                                } else {
+                                    cachedCandidates = emptyList()
                                 }
-                            }.getOrDefault(charts.take(20))
+                            }
                         }
+
+                        val forYou = computeForYou(_selectedMood.value)
 
                         _uiState.value = YouTubeDashboardUiState.Success(
                             forYou = forYou,
-                            charts = charts,
-                            sections = sections
+                            charts = cachedCharts,
+                            sections = sections,
+                            selectedMood = _selectedMood.value
                         )
                     }
             } catch (e: Exception) {
@@ -115,5 +136,21 @@ class YouTubeDashboardViewModel @Inject constructor(
                 _uiState.value = YouTubeDashboardUiState.Error(e.message ?: "Network error")
             }
         }
+    }
+
+    private fun computeForYou(mood: PersonalizedRanker.RecommendationMood): List<Song> {
+        if (cachedCandidates.isEmpty()) {
+            return cachedCharts.take(20)
+        }
+
+        val ranked = personalizedRanker.rank(
+            candidates = cachedCandidates,
+            engagements = cachedEngagements,
+            favoriteSongIds = emptySet(),
+            weights = cachedTunedWeights,
+            mood = mood
+        )
+        val selected = personalizedRanker.pickWithDiversity(ranked, emptySet(), limit = 20)
+        return if (selected.isNotEmpty()) selected else cachedCharts.take(20)
     }
 }

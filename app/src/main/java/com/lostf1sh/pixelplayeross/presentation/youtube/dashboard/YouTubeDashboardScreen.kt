@@ -119,6 +119,8 @@ fun YouTubeDashboardScreen(
                     DashboardContent(
                         forYou = state.forYou,
                         sections = state.sections,
+                        selectedMood = state.selectedMood,
+                        onMoodSelect = { viewModel.selectMood(it) },
                         onSongClick = onSongClick
                     )
                 }
@@ -127,10 +129,13 @@ fun YouTubeDashboardScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DashboardContent(
     forYou: List<Song>,
     sections: List<InnertubeBrowseSection>,
+    selectedMood: com.lostf1sh.pixelplayeross.data.recommendation.PersonalizedRanker.RecommendationMood,
+    onMoodSelect: (com.lostf1sh.pixelplayeross.data.recommendation.PersonalizedRanker.RecommendationMood) -> Unit,
     onSongClick: (Song) -> Unit
 ) {
     LazyColumn(
@@ -155,6 +160,22 @@ private fun DashboardContent(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(com.lostf1sh.pixelplayeross.data.recommendation.PersonalizedRanker.RecommendationMood.entries.toTypedArray()) { mood ->
+                            val isSelected = mood == selectedMood
+                            androidx.compose.material3.FilterChip(
+                                selected = isSelected,
+                                onClick = { onMoodSelect(mood) },
+                                label = { Text(mood.displayName) }
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
