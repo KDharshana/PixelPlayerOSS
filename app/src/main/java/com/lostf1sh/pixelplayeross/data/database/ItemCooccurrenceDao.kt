@@ -40,6 +40,12 @@ interface ItemCooccurrenceDao {
     @Query("DELETE FROM item_cooccurrences WHERE cooccurrence_count <= :minCount AND last_updated_timestamp < :staleBeforeTimestamp")
     suspend fun pruneStale(minCount: Int, staleBeforeTimestamp: Long): Int
 
+    @Query("SELECT COUNT(*) FROM item_cooccurrences")
+    suspend fun getEdgeCount(): Int
+
+    @Query("SELECT * FROM item_cooccurrences ORDER BY cooccurrence_count DESC LIMIT :limit")
+    suspend fun getTopCooccurrences(limit: Int): List<ItemCooccurrenceEntity>
+
     @Query("DELETE FROM item_cooccurrences")
     suspend fun clearAll()
 }

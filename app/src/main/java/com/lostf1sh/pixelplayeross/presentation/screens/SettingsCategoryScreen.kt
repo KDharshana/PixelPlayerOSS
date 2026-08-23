@@ -971,6 +971,13 @@ fun SettingsCategoryScreen(
                                     onClick = { navController.navigateSafely(Screen.Experimental.createRoute()) }
                                 )
                                 SettingsItem(
+                                    title = "Recommendation Engine Stats",
+                                    subtitle = "Inspect telemetry, adaptive weights, co-occurrence graph, and test signals",
+                                    leadingIcon = { Icon(painterResource(R.drawable.rounded_instant_mix_24), null, tint = MaterialTheme.colorScheme.primary) },
+                                    trailingIcon = { Icon(Icons.Rounded.ChevronRight, stringResource(R.string.cd_open), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    onClick = { navController.navigateSafely(Screen.RecommendationStats.createRoute()) }
+                                )
+                                SettingsItem(
                                     title = stringResource(R.string.setcat_test_setup_title),
                                     subtitle = stringResource(R.string.setcat_test_setup_subtitle),
                                     leadingIcon = { Icon(Icons.Rounded.Science, null, tint = MaterialTheme.colorScheme.tertiary) },

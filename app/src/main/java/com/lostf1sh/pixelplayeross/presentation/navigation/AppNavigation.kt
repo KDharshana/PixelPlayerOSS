@@ -654,6 +654,18 @@ fun AppNavigation(
                     playerViewModel = playerViewModel
                 )
             }
+
+            composable(
+                route = Screen.RecommendationStats.route,
+                enterTransition = { enterTransition() },
+                exitTransition = { exitTransition() },
+                popEnterTransition = { popEnterTransition() },
+                popExitTransition = { popExitTransition() }
+            ) {
+                com.lostf1sh.pixelplayeross.presentation.screens.RecommendationStatsScreen(
+                    onBackClick = { navController.popBackStack() }
+                )
+            }
         }
     }
 }
