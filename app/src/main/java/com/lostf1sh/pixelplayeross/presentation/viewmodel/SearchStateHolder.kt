@@ -71,6 +71,7 @@ class SearchStateHolder @Inject constructor(
     val searchHistory = _searchHistory.asStateFlow()
 
     private val searchRequests = MutableSharedFlow<SearchRequest>(
+        replay = 1,
         extraBufferCapacity = 1,
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
@@ -108,19 +109,26 @@ class SearchStateHolder @Inject constructor(
 
                     val currentFilter = _selectedSearchFilter.value
                     var currentLocalResults: List<SearchResultItem> = emptyList()
+                    var currentOnlineResults: List<SearchResultItem> = emptyList()
+
+                    fun updateCombinedResults() {
+                        if (request.requestId != latestSearchRequestId.get()) return
+                        val engagementsMap = runCatching {
+                            engagementDao.getAllEngagements().associateBy { it.songId }
+                        }.getOrDefault(emptyMap())
+
+                        val combined = (currentLocalResults + currentOnlineResults).distinctBy { it.dedupKey() }
+                        val sortedCombined = sortSearchResultsByPopularity(combined, normalizedQuery, engagementsMap)
+                        _searchResults.value = sortedCombined.toImmutableList()
+                    }
 
                     // 1. Stage 1: Immediate Local Search (FTS4 SQLite with popularity ranking)
                     val localJob = launch {
                         try {
                             musicRepository.searchAll(normalizedQuery, currentFilter).collect { localList ->
                                 if (request.requestId != latestSearchRequestId.get()) return@collect
-                                val engagementsMap = runCatching {
-                                    engagementDao.getAllEngagements().associateBy { it.songId }
-                                }.getOrDefault(emptyMap())
-
                                 currentLocalResults = localList
-                                val sortedLocal = sortSearchResultsByPopularity(localList, normalizedQuery, engagementsMap)
-                                _searchResults.value = sortedLocal.toImmutableList()
+                                updateCombinedResults()
                             }
                         } catch (_: CancellationException) {
                         } catch (e: Exception) {
@@ -136,15 +144,8 @@ class SearchStateHolder @Inject constructor(
                             if (request.requestId != latestSearchRequestId.get()) return@launch
 
                             currentContinuationToken = ytResult.continuationToken
-
-                            val engagementsMap = runCatching {
-                                engagementDao.getAllEngagements().associateBy { it.songId }
-                            }.getOrDefault(emptyMap())
-
-                            val combined = (currentLocalResults + ytResult.items).distinctBy { it.dedupKey() }
-                            val sortedCombined = sortSearchResultsByPopularity(combined, normalizedQuery, engagementsMap)
-
-                            _searchResults.value = sortedCombined.toImmutableList()
+                            currentOnlineResults = ytResult.items
+                            updateCombinedResults()
                         } catch (_: CancellationException) {
                         } catch (e: Exception) {
                             Timber.tag("SearchStateHolder").e(e, "Online search error for: $normalizedQuery")

@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -95,7 +95,7 @@ class SearchStateHolderTest {
 
         searchStateHolder.initialize(this)
         searchStateHolder.performSearch("Song")
-        advanceTimeBy(300L)
+        advanceUntilIdle()
 
         val results = searchStateHolder.searchResults.value
         assertThat(results).hasSize(2)
