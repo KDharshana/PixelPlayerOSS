@@ -44,14 +44,37 @@ class YouTubeExtractorManager @Inject constructor(
 
             android.util.Log.d("YouTubeMusic", "NewPipeExtractor found ${audioStreams.size} audio streams for $videoId")
 
-            // Prefer highest bitrate Opus, then AAC
+            // Select maximum quality stream (prefer highest effective bitrate Opus 160k / AAC 256k)
             val selectedStream = audioStreams
                 .filter { !it.content.isNullOrBlank() }
-                .maxByOrNull { it.averageBitrate }
-                ?: audioStreams.firstOrNull { !it.content.isNullOrBlank() }
+                .maxWithOrNull(
+                    compareBy<org.schabi.newpipe.extractor.stream.AudioStream> { stream ->
+                        val rawBitrate = maxOf(stream.bitrate, stream.averageBitrate, 0)
+                        val isOpus = stream.format == org.schabi.newpipe.extractor.MediaFormat.WEBMA_OPUS ||
+                            stream.codec?.contains("opus", ignoreCase = true) == true
+                        val isHighQualityAac = rawBitrate >= 256000
+                        val isStandardAac = stream.format == org.schabi.newpipe.extractor.MediaFormat.M4A ||
+                            stream.codec?.contains("mp4a", ignoreCase = true) == true ||
+                            stream.codec?.contains("aac", ignoreCase = true) == true
+
+                        val fidelityScore = when {
+                            isHighQualityAac -> rawBitrate * 1.05
+                            isOpus -> rawBitrate * 1.25 // 160k Opus achieves higher perceptual fidelity than 128k AAC
+                            isStandardAac -> rawBitrate * 1.0
+                            else -> rawBitrate * 0.9
+                        }
+                        fidelityScore.toInt()
+                    }.thenBy { stream ->
+                        stream.samplingRate
+                    }
+                ) ?: audioStreams.firstOrNull { !it.content.isNullOrBlank() }
 
             val resolvedUrl = selectedStream?.content
-            android.util.Log.d("YouTubeMusic", "NewPipeExtractor resolved stream url: ${resolvedUrl != null} (format=${selectedStream?.format?.name}, bitrate=${selectedStream?.averageBitrate})")
+            val effectiveBitrate = selectedStream?.let { maxOf(it.bitrate, it.averageBitrate, 0) } ?: 0
+            android.util.Log.d(
+                "YouTubeMusic",
+                "NewPipeExtractor selected max quality stream: format=${selectedStream?.format?.name}, codec=${selectedStream?.codec}, bitrate=${effectiveBitrate}bps, sampleRate=${selectedStream?.samplingRate}Hz"
+            )
             resolvedUrl
         } catch (e: Exception) {
             android.util.Log.e("YouTubeMusic", "NewPipeExtractor failed for videoId: $videoId", e)

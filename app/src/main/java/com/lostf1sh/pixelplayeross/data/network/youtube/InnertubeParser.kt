@@ -111,7 +111,22 @@ object InnertubeParser {
                 .maxByOrNull { it.bitrate }
                 ?.url
 
-            val defaultUrl = highestOpus ?: highestAac ?: formats.firstOrNull { !it.url.isNullOrBlank() }?.url
+            val bestFormat = formats
+                .filter { !it.url.isNullOrBlank() }
+                .maxWithOrNull(
+                    compareBy<InnertubeStreamFormat> { fmt ->
+                        val rawBitrate = fmt.bitrate
+                        val fidelityScore = when {
+                            rawBitrate >= 256000 -> rawBitrate * 1.05
+                            fmt.isOpus -> rawBitrate * 1.25
+                            fmt.isAac -> rawBitrate * 1.0
+                            else -> rawBitrate * 0.9
+                        }
+                        fidelityScore.toInt()
+                    }.thenBy { it.sampleRate ?: 0 }
+                )
+
+            val defaultUrl = bestFormat?.url ?: highestOpus ?: highestAac ?: formats.firstOrNull { !it.url.isNullOrBlank() }?.url
 
             InnertubeStreamInfo(
                 videoId = videoId,
