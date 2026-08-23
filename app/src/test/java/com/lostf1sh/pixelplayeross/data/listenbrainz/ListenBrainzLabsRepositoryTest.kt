@@ -56,7 +56,7 @@ class ListenBrainzLabsRepositoryTest {
     }
 
     @Test
-    fun `getLbRadioTracks calls labsApi and returns recordings`() = runTest {
+    fun `getLbRadioTracks formats prompt with DSL and returns recordings`() = runTest {
         val recording = LbRadioRecording(
             trackName = "Master of Puppets",
             artistName = "Metallica"
@@ -65,7 +65,7 @@ class ListenBrainzLabsRepositoryTest {
             payload = LbRadioPayload(recordings = listOf(recording))
         )
 
-        coEvery { labsApi.getLbRadio("Metallica") } returns Response.success(response)
+        coEvery { labsApi.getLbRadio("artist:(Metallica)") } returns Response.success(response)
 
         val repository = ListenBrainzRepository(
             api = api,

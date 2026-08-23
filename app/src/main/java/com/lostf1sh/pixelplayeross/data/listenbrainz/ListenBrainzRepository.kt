@@ -347,16 +347,22 @@ class ListenBrainzRepository @Inject constructor(
         val trimmed = prompt.trim()
         if (trimmed.isEmpty()) return emptyList()
 
+        val formattedPrompt = if (trimmed.startsWith("artist:(") || trimmed.contains(":")) {
+            trimmed
+        } else {
+            "artist:($trimmed)"
+        }
+
         return try {
-            val response = labsApi.getLbRadio(trimmed)
+            val response = labsApi.getLbRadio(formattedPrompt)
             if (response.isSuccessful) {
                 response.body()?.payload?.recordings.orEmpty()
             } else {
-                Timber.tag(TAG).w("Failed to fetch LB radio for %s: code=%d", trimmed, response.code())
+                Timber.tag(TAG).w("Failed to fetch LB radio for %s: code=%d", formattedPrompt, response.code())
                 emptyList()
             }
         } catch (e: Exception) {
-            Timber.tag(TAG).e(e, "Error fetching LB radio for %s", trimmed)
+            Timber.tag(TAG).e(e, "Error fetching LB radio for %s", formattedPrompt)
             emptyList()
         }
     }
