@@ -1,37 +1,26 @@
 package com.lostf1sh.pixelplayeross.data.listenbrainz
 
 import com.google.common.truth.Truth.assertThat
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.MockWebServer
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.Response
 
 class ListenBrainzLabsRepositoryTest {
 
-    private lateinit var mockServer: MockWebServer
-    private lateinit var labsApiService: ListenBrainzLabsApiService
-
-    @BeforeEach
-    fun setup() {
-        mockServer = MockWebServer()
-        labsApiService = Retrofit.Builder()
-            .baseUrl(mockServer.url("/"))
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(ListenBrainzLabsApiService::class.java)
-    }
-
-    @AfterEach
-    fun teardown() {
-        mockServer.shutdown()
-    }
+    private val gson = Gson()
+    private val api: ListenBrainzApiService = mockk(relaxed = true)
+    private val labsApi: ListenBrainzLabsApiService = mockk(relaxed = true)
+    private val listenBrainzDao: com.lostf1sh.pixelplayeross.data.database.ListenBrainzDao = mockk(relaxed = true)
+    private val workManager: androidx.work.WorkManager = mockk(relaxed = true)
+    private val endpoint: ListenBrainzEndpoint = mockk(relaxed = true)
+    private val context: android.content.Context = mockk(relaxed = true)
 
     @Test
-    fun `getSimilarArtists parses response correctly`() = runTest {
+    fun `similar artists json deserialization maps correctly`() {
         val sampleJson = """
             [
                 {
@@ -53,20 +42,43 @@ class ListenBrainzLabsRepositoryTest {
             ]
         """.trimIndent()
 
-        mockServer.enqueue(MockResponse().setResponseCode(200).setBody(sampleJson))
+        val type = object : TypeToken<List<LbSimilarArtistsResponse>>() {}.type
+        val body: List<LbSimilarArtistsResponse> = gson.fromJson(sampleJson, type)
 
-        val response = labsApiService.getSimilarArtists("65f4f0c5-ef9e-490c-aee3-909e7f6b2e4f")
-        assertThat(response.isSuccessful).isTrue()
-        val body = response.body()
-        assertThat(body).isNotNull()
-        assertThat(body?.size).isEqualTo(1)
-
-        val first = body!!.first()
+        assertThat(body).hasSize(1)
+        val first = body.first()
         assertThat(first.artistName).isEqualTo("Metallica")
         assertThat(first.similarArtists).hasSize(2)
         assertThat(first.similarArtists[0].name).isEqualTo("Megadeth")
         assertThat(first.similarArtists[0].score).isEqualTo(0.892)
         assertThat(first.similarArtists[1].name).isEqualTo("Slayer")
         assertThat(first.similarArtists[1].score).isEqualTo(0.765)
+    }
+
+    @Test
+    fun `getLbRadioTracks calls labsApi and returns recordings`() = runTest {
+        val recording = LbRadioRecording(
+            trackName = "Master of Puppets",
+            artistName = "Metallica"
+        )
+        val response = LbRadioResponse(
+            payload = LbRadioPayload(recordings = listOf(recording))
+        )
+
+        coEvery { labsApi.getLbRadio("Metallica") } returns Response.success(response)
+
+        val repository = ListenBrainzRepository(
+            api = api,
+            labsApi = labsApi,
+            listenBrainzDao = listenBrainzDao,
+            workManager = workManager,
+            endpoint = endpoint,
+            context = context
+        )
+
+        val tracks = repository.getLbRadioTracks("Metallica")
+        assertThat(tracks).hasSize(1)
+        assertThat(tracks.first().trackName).isEqualTo("Master of Puppets")
+        assertThat(tracks.first().artistName).isEqualTo("Metallica")
     }
 }
