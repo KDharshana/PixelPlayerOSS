@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import java.io.File
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 
 data class SetupArtistItem(

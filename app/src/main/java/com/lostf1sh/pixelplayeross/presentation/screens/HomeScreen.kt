@@ -533,8 +533,8 @@ fun HomeScreen(
                             title = stringResource(R.string.home_section_favorite_artists),
                             subtitle = stringResource(R.string.home_section_favorite_artists_subtitle),
                             artists = favoriteArtists.toList(),
-                            onArtistClick = { artistName ->
-                                navController.navigateSafely(Screen.Search.createRoute(artistName))
+                            onArtistClick = { _ ->
+                                navController.navigateSafely(Screen.Search.route)
                             }
                         )
                     }
