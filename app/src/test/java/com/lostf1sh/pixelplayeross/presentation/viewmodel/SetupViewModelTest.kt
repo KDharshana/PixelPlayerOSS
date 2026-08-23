@@ -66,7 +66,13 @@ class SetupViewModelTest {
         backupManager = mockk(relaxed = true)
         musicRepository = mockk(relaxed = true)
         youTubeRepository = mockk(relaxed = true)
-        context = mockk(relaxed = true)
+        val storageManager = mockk<android.os.storage.StorageManager>(relaxed = true) {
+            every { storageVolumes } returns emptyList()
+        }
+        context = mockk(relaxed = true) {
+            every { getSystemService(Context.STORAGE_SERVICE) } returns storageManager
+            every { getSystemService(android.os.storage.StorageManager::class.java) } returns storageManager
+        }
     }
 
     @AfterEach
