@@ -1,6 +1,7 @@
 package com.lostf1sh.pixelplayeross.presentation.viewmodel
 
 import android.content.Context
+import android.os.Environment
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.lostf1sh.pixelplayeross.data.backup.BackupManager
 import com.lostf1sh.pixelplayeross.data.model.SearchResultItem
@@ -11,7 +12,10 @@ import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import com.lostf1sh.pixelplayeross.data.worker.SyncManager
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -46,6 +50,8 @@ class SetupViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         tempDir = Files.createTempDirectory("setup-vm-test")
+        mockkStatic(Environment::class)
+        every { Environment.getExternalStorageDirectory() } returns tempDir.toFile()
         userPreferencesRepository = UserPreferencesRepository(
             dataStore = PreferenceDataStoreFactory.create(
                 scope = kotlinx.coroutines.CoroutineScope(testDispatcher),
@@ -66,6 +72,7 @@ class SetupViewModelTest {
     @AfterEach
     fun tearDown() {
         Dispatchers.resetMain()
+        unmockkStatic(Environment::class)
         tempDir.toFile().deleteRecursively()
     }
 
