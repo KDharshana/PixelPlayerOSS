@@ -36,8 +36,8 @@ import java.io.File
 import com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
 
 data class SetupArtistItem(
-    val id: String = name,
     val name: String,
+    val id: String = name,
     val imageUrl: String? = null
 )
 
