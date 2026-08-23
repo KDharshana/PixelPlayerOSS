@@ -111,11 +111,15 @@ class SearchStateHolder @Inject constructor(
                     var currentLocalResults: List<SearchResultItem> = emptyList()
                     var currentOnlineResults: List<SearchResultItem> = emptyList()
 
-                    fun updateCombinedResults() {
+                    suspend fun updateCombinedResults() {
                         if (request.requestId != latestSearchRequestId.get()) return
-                        val engagementsMap = runCatching {
+                        val engagementsMap = try {
                             engagementDao.getAllEngagements().associateBy { it.songId }
-                        }.getOrDefault(emptyMap())
+                        } catch (_: CancellationException) {
+                            throw CancellationException()
+                        } catch (e: Exception) {
+                            emptyMap()
+                        }
 
                         val combined = (currentLocalResults + currentOnlineResults).distinctBy { it.dedupKey() }
                         val sortedCombined = sortSearchResultsByPopularity(combined, normalizedQuery, engagementsMap)
@@ -261,9 +265,13 @@ class SearchStateHolder @Inject constructor(
                     val newUniqueItems = pageResult.items.filter { it.dedupKey() !in existingKeys }
 
                     if (newUniqueItems.isNotEmpty()) {
-                        val engagementsMap = runCatching {
+                        val engagementsMap = try {
                             engagementDao.getAllEngagements().associateBy { it.songId }
-                        }.getOrDefault(emptyMap())
+                        } catch (_: CancellationException) {
+                            throw CancellationException()
+                        } catch (e: Exception) {
+                            emptyMap()
+                        }
                         val combined = (_searchResults.value + newUniqueItems).distinctBy { it.dedupKey() }
                         _searchResults.value = sortSearchResultsByPopularity(combined, lastQuery, engagementsMap).toImmutableList()
                     }
