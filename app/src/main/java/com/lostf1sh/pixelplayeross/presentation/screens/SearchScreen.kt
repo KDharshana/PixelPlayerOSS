@@ -366,7 +366,8 @@ fun SearchScreen(
                         onGenreClick = { genre ->
                             Timber.tag("SearchScreen")
                                 .d("Genre clicked: ${genre.name} (ID: ${genre.id})")
-                            navController.navigateSafely(Screen.GenreDetail.createRoute(genre.id))
+                            val encodedGenreId = java.net.URLEncoder.encode(genre.id, "UTF-8")
+                            navController.navigateSafely(Screen.GenreDetail.createRoute(encodedGenreId))
                         },
                         playerViewModel = playerViewModel,
                         modifier = Modifier.padding(top = 12.dp)
@@ -504,7 +505,7 @@ fun SearchScreen(
                 },
                 onNavigateToGenre = {
                     currentSong.genre?.let {
-                        navController.navigateSafely(Screen.GenreDetail.createRoute(it))
+                        navController.navigateSafely(Screen.GenreDetail.createRoute(java.net.URLEncoder.encode(it, "UTF-8")))
                     }
                     showSongInfoBottomSheet = false
                 },
