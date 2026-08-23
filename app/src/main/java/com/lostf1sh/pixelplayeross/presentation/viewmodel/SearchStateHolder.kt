@@ -43,7 +43,8 @@ import kotlinx.coroutines.flow.map
 @Singleton
 class SearchStateHolder @Inject constructor(
     private val musicRepository: MusicRepository,
-    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository
+    private val youTubeRepository: com.lostf1sh.pixelplayeross.data.youtube.YouTubeRepository,
+    private val engagementDao: com.lostf1sh.pixelplayeross.data.database.EngagementDao
 ) {
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 150L
@@ -108,13 +109,18 @@ class SearchStateHolder @Inject constructor(
                     val currentFilter = _selectedSearchFilter.value
                     var currentLocalResults: List<SearchResultItem> = emptyList()
 
-                    // 1. Stage 1: Immediate Local Search (FTS4 SQLite)
+                    // 1. Stage 1: Immediate Local Search (FTS4 SQLite with popularity ranking)
                     val localJob = launch {
                         try {
                             musicRepository.searchAll(normalizedQuery, currentFilter).collect { localList ->
                                 if (request.requestId != latestSearchRequestId.get()) return@collect
+                                val engagementsMap = runCatching {
+                                    engagementDao.getAllEngagements().associateBy { it.songId }
+                                }.getOrDefault(emptyMap())
+
                                 currentLocalResults = localList
-                                _searchResults.value = localList.toImmutableList()
+                                val sortedLocal = sortSearchResultsByPopularity(localList, normalizedQuery, engagementsMap)
+                                _searchResults.value = sortedLocal.toImmutableList()
                             }
                         } catch (_: CancellationException) {
                         } catch (e: Exception) {
@@ -122,7 +128,7 @@ class SearchStateHolder @Inject constructor(
                         }
                     }
 
-                    // 2. Stage 2: Background Progressive Online Search (YouTube Music)
+                    // 2. Stage 2: Background Progressive Online Search (YouTube Music ranked high to low popularity)
                     launch {
                         _isSearchingOnline.value = true
                         try {
@@ -131,9 +137,14 @@ class SearchStateHolder @Inject constructor(
 
                             currentContinuationToken = ytResult.continuationToken
 
-                            val combined = (currentLocalResults + ytResult.items).distinctBy { it.dedupKey() }
+                            val engagementsMap = runCatching {
+                                engagementDao.getAllEngagements().associateBy { it.songId }
+                            }.getOrDefault(emptyMap())
 
-                            _searchResults.value = combined.toImmutableList()
+                            val combined = (currentLocalResults + ytResult.items).distinctBy { it.dedupKey() }
+                            val sortedCombined = sortSearchResultsByPopularity(combined, normalizedQuery, engagementsMap)
+
+                            _searchResults.value = sortedCombined.toImmutableList()
                         } catch (_: CancellationException) {
                         } catch (e: Exception) {
                             Timber.tag("SearchStateHolder").e(e, "Online search error for: $normalizedQuery")
@@ -154,6 +165,83 @@ class SearchStateHolder @Inject constructor(
         is SearchResultItem.PlaylistItem -> "playlist_${playlist.id}"
     }
 
+    /**
+     * Ranks search result items strictly from high to low popularity and query relevance.
+     */
+    private fun sortSearchResultsByPopularity(
+        items: List<SearchResultItem>,
+        query: String,
+        engagementsMap: Map<String, com.lostf1sh.pixelplayeross.data.database.SongEngagementEntity>
+    ): List<SearchResultItem> {
+        if (items.isEmpty() || query.isBlank()) return items
+
+        val lowerQuery = query.lowercase().trim()
+
+        return items.mapIndexed { originalIndex, item ->
+            val relevanceScore = computeRelevanceScore(item, lowerQuery)
+            val popularityScore = computePopularityScore(item, engagementsMap, originalIndex)
+            val totalScore = (relevanceScore * 2.0) + popularityScore
+            item to totalScore
+        }.sortedByDescending { it.second }
+        .map { it.first }
+    }
+
+    private fun computeRelevanceScore(item: SearchResultItem, lowerQuery: String): Double {
+        val (primaryText, secondaryText) = when (item) {
+            is SearchResultItem.SongItem -> item.song.title.lowercase().trim() to item.song.artist.lowercase().trim()
+            is SearchResultItem.AlbumItem -> item.album.title.lowercase().trim() to item.album.artist.lowercase().trim()
+            is SearchResultItem.ArtistItem -> item.artist.name.lowercase().trim() to ""
+            is SearchResultItem.PlaylistItem -> item.playlist.name.lowercase().trim() to ""
+        }
+
+        return when {
+            primaryText == lowerQuery -> 100.0
+            secondaryText == lowerQuery -> 90.0
+            primaryText.startsWith(lowerQuery) -> 75.0
+            secondaryText.startsWith(lowerQuery) -> 65.0
+            primaryText.contains("\\b${Regex.escape(lowerQuery)}\\b".toRegex()) -> 55.0
+            primaryText.contains(lowerQuery) -> 40.0
+            secondaryText.contains(lowerQuery) -> 30.0
+            else -> 10.0
+        }
+    }
+
+    private fun computePopularityScore(
+        item: SearchResultItem,
+        engagementsMap: Map<String, com.lostf1sh.pixelplayeross.data.database.SongEngagementEntity>,
+        originalIndex: Int
+    ): Double {
+        return when (item) {
+            is SearchResultItem.SongItem -> {
+                val song = item.song
+                val engagement = engagementsMap[song.id]
+                val playScore = (engagement?.playCount ?: 0) * 3.0
+                val completionScore = (engagement?.completionCount ?: 0) * 4.0
+                val repeatScore = (engagement?.sessionRepeatCount ?: 0) * 3.5
+                val skipPenalty = (engagement?.skipBefore30sCount ?: 0) * 1.5
+                val favBonus = if (song.isFavorite) 20.0 else 0.0
+
+                // YouTube items preserve online search index popularity (top hits rank highest)
+                val onlinePopularity = if (song.youtubeId != null || song.id.startsWith("youtube_")) {
+                    maxOf(0.0, 50.0 - (originalIndex * 1.5))
+                } else {
+                    0.0
+                }
+
+                playScore + completionScore + repeatScore + favBonus + onlinePopularity - skipPenalty
+            }
+            is SearchResultItem.ArtistItem -> {
+                maxOf(0.0, 45.0 - (originalIndex * 1.5))
+            }
+            is SearchResultItem.AlbumItem -> {
+                maxOf(0.0, 35.0 - (originalIndex * 1.5))
+            }
+            is SearchResultItem.PlaylistItem -> {
+                maxOf(0.0, 25.0 - (originalIndex * 1.5))
+            }
+        }
+    }
+
     fun loadMoreSearchResults() {
         val continuation = currentContinuationToken ?: return
         if (_isLoadingMore.value || lastQuery.isBlank()) return
@@ -172,7 +260,11 @@ class SearchStateHolder @Inject constructor(
                     val newUniqueItems = pageResult.items.filter { it.dedupKey() !in existingKeys }
 
                     if (newUniqueItems.isNotEmpty()) {
-                        _searchResults.value = (_searchResults.value + newUniqueItems).toImmutableList()
+                        val engagementsMap = runCatching {
+                            engagementDao.getAllEngagements().associateBy { it.songId }
+                        }.getOrDefault(emptyMap())
+                        val combined = (_searchResults.value + newUniqueItems).distinctBy { it.dedupKey() }
+                        _searchResults.value = sortSearchResultsByPopularity(combined, lastQuery, engagementsMap).toImmutableList()
                     }
                 }
             } catch (e: Exception) {
