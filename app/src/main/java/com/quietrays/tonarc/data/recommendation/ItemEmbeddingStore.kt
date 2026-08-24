@@ -49,13 +49,15 @@ class ItemEmbeddingStore @Inject constructor(
             if (rows.isEmpty()) return emptyList()
 
             val maxCount = rows.maxOfOrNull { it.cooccurrenceCount }?.toDouble() ?: 1.0
+            val safeMaxCount = if (maxCount <= 0.0 || maxCount.isNaN() || maxCount.isInfinite()) 1.0 else maxCount
 
             rows.mapNotNull { row ->
                 val neighborId = if (row.songIdA == safeId) row.songIdB else row.songIdA
                 if (neighborId == safeId) null
                 else {
-                    // Normalized score in [0.1, 1.0] based on relative edge weight
-                    val normalizedScore = (row.cooccurrenceCount.toDouble() / maxCount).coerceIn(0.1, 1.0)
+                    // Strictly normalized score in [0.0, 1.0] based on relative edge weight
+                    val rawScore = row.cooccurrenceCount.toDouble() / safeMaxCount
+                    val normalizedScore = if (rawScore.isNaN() || rawScore.isInfinite()) 0.0 else rawScore.coerceIn(0.0, 1.0)
                     Pair(neighborId, normalizedScore)
                 }
             }.take(limit)
@@ -63,6 +65,51 @@ class ItemEmbeddingStore @Inject constructor(
             Timber.tag(TAG).e(e, "Failed to query similar songs for %s", safeId)
             emptyList()
         }
+    }
+
+    /**
+     * Calculates cosine similarity between two dense float embedding vectors.
+     * Guaranteed safe against zero divisor, NaN, and infinity edge cases with `if (norm == 0f) 0f else dot / norm`.
+     */
+    fun cosineSimilarity(vecA: FloatArray, vecB: FloatArray): Float {
+        if (vecA.isEmpty() || vecB.isEmpty() || vecA.size != vecB.size) return 0f
+        var dot = 0f
+        var normA = 0f
+        var normB = 0f
+        for (i in vecA.indices) {
+            val a = vecA[i]
+            val b = vecB[i]
+            if (a.isNaN() || b.isNaN() || a.isInfinite() || b.isInfinite()) continue
+            dot += a * b
+            normA += a * a
+            normB += b * b
+        }
+        val norm = sqrt(normA * normB)
+        return if (norm == 0f || norm.isNaN() || norm.isInfinite()) 0f else (dot / norm).coerceIn(0f, 1f)
+    }
+
+    /**
+     * Calculates cosine similarity between two sparse double embedding vectors.
+     * Guaranteed safe against zero divisor, NaN, and infinity edge cases.
+     */
+    fun cosineSimilarity(vecA: Map<String, Double>, vecB: Map<String, Double>): Double {
+        if (vecA.isEmpty() || vecB.isEmpty()) return 0.0
+        var dot = 0.0
+        var normA = 0.0
+        var normB = 0.0
+        for ((key, a) in vecA) {
+            if (a.isNaN() || a.isInfinite()) continue
+            normA += a * a
+            val b = vecB[key] ?: continue
+            if (b.isNaN() || b.isInfinite()) continue
+            dot += a * b
+        }
+        for ((_, b) in vecB) {
+            if (b.isNaN() || b.isInfinite()) continue
+            normB += b * b
+        }
+        val norm = sqrt(normA * normB)
+        return if (norm == 0.0 || norm.isNaN() || norm.isInfinite()) 0.0 else (dot / norm).coerceIn(0.0, 1.0)
     }
 
     /**

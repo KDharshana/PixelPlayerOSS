@@ -67,16 +67,21 @@ class PersonalizedRanker @Inject constructor() {
         favoriteSongIds: Set<String>,
         weights: RankingWeights = RankingWeights(),
         mood: RecommendationMood = RecommendationMood.ALL,
+        excludedSongIds: Set<String> = emptySet(),
         random: Random = Random()
     ): List<ScoredCandidate> {
         if (candidates.isEmpty()) return emptyList()
 
         val now = System.currentTimeMillis()
-        val maxPlayCount = engagements.values.maxOfOrNull { it.playCount }?.takeIf { it > 0 } ?: 1
-        val maxDuration = engagements.values.maxOfOrNull { it.totalPlayDurationMs }?.takeIf { it > 0L } ?: 1L
+        val maxPlayCount = engagements.values.maxOfOrNull { it.playCount }?.takeIf { it > 0 }?.toDouble() ?: 1.0
+        val maxDuration = engagements.values.maxOfOrNull { it.totalPlayDurationMs }?.takeIf { it > 0L }?.toDouble() ?: 1.0
 
         return candidates.mapNotNull { candidate ->
             val song = candidate.song
+            if (song.id in excludedSongIds) return@mapNotNull null
+            val ytId = song.youtubeId
+            if (ytId != null && ytId in excludedSongIds) return@mapNotNull null
+
             val stats = engagements[song.id]
 
             val songEnergy = song.genre?.lowercase()?.let(com.quietrays.tonarc.data.playlist.nlp.GenreTaxonomy::energyOf)
@@ -86,25 +91,32 @@ class PersonalizedRanker @Inject constructor() {
                 }
             }
 
-            val playCountScore = (stats?.playCount?.toDouble() ?: 0.0) / maxPlayCount
-            val durationScore = (stats?.totalPlayDurationMs?.toDouble() ?: 0.0) / maxDuration
+            val playCount = stats?.playCount?.toDouble() ?: 0.0
+            val playCountScore = if (maxPlayCount <= 0.0 || maxPlayCount.isNaN() || maxPlayCount.isInfinite()) 0.0 
+                else (playCount / maxPlayCount).coerceIn(0.0, 1.0)
+
+            val totalDuration = stats?.totalPlayDurationMs?.toDouble() ?: 0.0
+            val durationScore = if (maxDuration <= 0.0 || maxDuration.isNaN() || maxDuration.isInfinite()) 0.0 
+                else (totalDuration / maxDuration).coerceIn(0.0, 1.0)
 
             val completionBoost = if (stats != null && stats.playCount > 0) {
-                (stats.completionCount.toDouble() / stats.playCount).coerceIn(0.0, 1.0)
+                val ratio = stats.completionCount.toDouble() / stats.playCount
+                if (ratio.isNaN() || ratio.isInfinite()) 0.0 else ratio.coerceIn(0.0, 1.0)
             } else 0.0
 
             val totalPlaysAndSkips = (stats?.playCount ?: 0) + (stats?.skipBefore30sCount ?: 0)
             val skipPenalty = if (stats != null && totalPlaysAndSkips > 0) {
-                (stats.skipBefore30sCount.toDouble() / totalPlaysAndSkips).coerceIn(0.0, 1.0)
+                val ratio = stats.skipBefore30sCount.toDouble() / totalPlaysAndSkips
+                if (ratio.isNaN() || ratio.isInfinite()) 0.0 else ratio.coerceIn(0.0, 1.0)
             } else 0.0
 
             val rawAffinity = (playCountScore * 0.45 + durationScore * 0.25 + completionBoost * weights.completionBoostMultiplier - skipPenalty * weights.skipPenaltyMultiplier)
-            val affinityScore = rawAffinity.coerceIn(0.0, 1.0)
+            val affinityScore = if (rawAffinity.isNaN() || rawAffinity.isInfinite()) 0.0 else rawAffinity.coerceIn(0.0, 1.0)
 
             val recencyScore = computeRecencyScore(stats?.lastPlayedTimestamp, now)
             val noveltyScore = computeNoveltyScore(song.dateAdded, now)
             val favoriteScore = if (favoriteSongIds.contains(song.id)) 1.0 else 0.0
-            val sourceStrengthScore = candidate.sourceStrength.coerceIn(0.0, 1.0)
+            val sourceStrengthScore = if (candidate.sourceStrength.isNaN() || candidate.sourceStrength.isInfinite()) 0.5 else candidate.sourceStrength.coerceIn(0.0, 1.0)
             val baselineScore = if (stats == null) 0.05 else 0.0
             val noise = random.nextDouble() * 0.005
 
@@ -139,6 +151,7 @@ class PersonalizedRanker @Inject constructor() {
         rankedCandidates: List<ScoredCandidate>,
         favoriteSongIds: Set<String>,
         limit: Int,
+        excludedSongIds: Set<String> = emptySet(),
         state: DiversityState = DiversityState()
     ): List<Song> {
         if (limit <= 0 || rankedCandidates.isEmpty()) return emptyList()
@@ -147,6 +160,10 @@ class PersonalizedRanker @Inject constructor() {
         for (scored in rankedCandidates) {
             if (selected.size >= limit) break
             val song = scored.song
+            if (song.id in excludedSongIds) continue
+            val ytId = song.youtubeId
+            if (ytId != null && ytId in excludedSongIds) continue
+
             val isFavorite = favoriteSongIds.contains(song.id)
             val maxPerArtist = if (isFavorite) 3 else 2
             val key = artistKey(song)
@@ -161,9 +178,13 @@ class PersonalizedRanker @Inject constructor() {
             val selectedIds = selected.mapTo(HashSet()) { it.id }
             for (scored in rankedCandidates) {
                 if (selected.size >= limit) break
-                if (scored.song.id in selectedIds) continue
-                selected += scored.song
-                selectedIds += scored.song.id
+                val song = scored.song
+                if (song.id in excludedSongIds || song.id in selectedIds) continue
+                val ytId = song.youtubeId
+                if (ytId != null && ytId in excludedSongIds) continue
+
+                selected += song
+                selectedIds += song.id
             }
         }
 
@@ -172,20 +193,24 @@ class PersonalizedRanker @Inject constructor() {
 
     private fun computeRecencyScore(lastPlayedTimestamp: Long?, now: Long): Double {
         if (lastPlayedTimestamp == null || lastPlayedTimestamp <= 0L) return 0.6
-        val days = ((now - lastPlayedTimestamp).coerceAtLeast(0L) / TimeUnit.DAYS.toMillis(1)).toDouble()
-        return when {
-            days < 1 -> 0.2
-            days < 3 -> 0.5
-            days < 7 -> 0.7
-            days < 14 -> 0.85
+        val diffMs = (now - lastPlayedTimestamp).coerceAtLeast(0L)
+        val days = (diffMs / TimeUnit.DAYS.toMillis(1).toDouble()).let { if (it.isNaN() || it.isInfinite()) 0.0 else it }
+        val score = when {
+            days < 1.0 -> 0.2
+            days < 3.0 -> 0.5
+            days < 7.0 -> 0.7
+            days < 14.0 -> 0.85
             else -> 1.0
         }
+        return if (score.isNaN() || score.isInfinite()) 0.5 else score.coerceIn(0.0, 1.0)
     }
 
     private fun computeNoveltyScore(dateAdded: Long, now: Long): Double {
         if (dateAdded <= 0L) return 0.0
         val dateAddedMillis = if (dateAdded < 10_000_000_000L) TimeUnit.SECONDS.toMillis(dateAdded) else dateAdded
-        val days = ((now - dateAddedMillis).coerceAtLeast(0L) / TimeUnit.DAYS.toMillis(1)).toDouble()
-        return (1.0 - (days / 60.0)).coerceIn(0.0, 1.0)
+        val diffMs = (now - dateAddedMillis).coerceAtLeast(0L)
+        val days = (diffMs / TimeUnit.DAYS.toMillis(1).toDouble()).let { if (it.isNaN() || it.isInfinite()) 0.0 else it }
+        val score = 1.0 - (days / 60.0)
+        return if (score.isNaN() || score.isInfinite()) 0.0 else score.coerceIn(0.0, 1.0)
     }
 }

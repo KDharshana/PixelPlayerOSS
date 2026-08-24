@@ -37,12 +37,18 @@ class CandidateAggregator @Inject constructor(
 
     suspend fun collect(
         seedSongs: List<Song>,
-        limit: Int = 100
+        limit: Int = 100,
+        excludedSongIds: Set<String> = emptySet()
     ): List<RecommendationCandidate> = coroutineScope {
         val favoriteArtists = runCatching { userPreferencesRepository.favoriteArtistsFlow.first() }.getOrDefault(emptySet())
-        if (seedSongs.isEmpty() && favoriteArtists.isEmpty()) return@coroutineScope emptyList()
+        val validSeeds = seedSongs.filterNot { it.id in excludedSongIds }
 
-        val topSeeds = seedSongs.take(5)
+        // Cold Start Fallback: If no seeds and no favorite artists are present, query top genres and randomized unplayed tracks
+        if (validSeeds.isEmpty() && favoriteArtists.isEmpty()) {
+            return@coroutineScope collectColdStartFallback(limit, excludedSongIds)
+        }
+
+        val topSeeds = validSeeds.take(5)
         val ytDeferred = async { collectYouTubeRadioCandidates(topSeeds) }
         val lbDeferred = async { collectListenBrainzCandidates(topSeeds) }
         val genreDeferred = async { collectGenreCandidates(topSeeds) }
@@ -70,7 +76,72 @@ class CandidateAggregator @Inject constructor(
             .getOrDefault(emptyList())
 
         val allCandidates = favCandidates + cooccurCandidates + ytCandidates + lbCandidates + genreCandidates
-        deduplicateCandidates(allCandidates).take(limit)
+        val deduplicated = deduplicateCandidates(allCandidates, excludedSongIds)
+
+        // If candidate aggregations yielded empty (e.g. offline with no prior cache), trigger cold start fallback
+        if (deduplicated.isEmpty()) {
+            collectColdStartFallback(limit, excludedSongIds)
+        } else {
+            deduplicated.take(limit)
+        }
+    }
+
+    private suspend fun collectColdStartFallback(
+        limit: Int,
+        excludedSongIds: Set<String>
+    ): List<RecommendationCandidate> {
+        val candidates = mutableListOf<RecommendationCandidate>()
+        val allLocalSongs = runCatching { musicRepository.getAudioFiles().first() }.getOrDefault(emptyList())
+
+        if (allLocalSongs.isNotEmpty()) {
+            val unexcludedSongs = allLocalSongs.filterNot { it.id in excludedSongIds }
+
+            // 1. Group by top-rated / taxonomy genres
+            val genreGroups = unexcludedSongs
+                .filter { !it.genre.isNullOrBlank() }
+                .groupBy { GenreTaxonomy.familyOf(it.genre!!.lowercase()) }
+
+            for ((_, songsInGenre) in genreGroups) {
+                songsInGenre.shuffled().take(6).forEach { song ->
+                    candidates.add(
+                        RecommendationCandidate(
+                            song = song,
+                            sourceType = CandidateSourceType.GENRE_EXPANSION,
+                            sourceStrength = 0.70,
+                            seedSongId = null
+                        )
+                    )
+                }
+            }
+
+            // 2. Randomized unplayed tracks from local library
+            val randomizedUnplayed = unexcludedSongs.shuffled().take(20)
+            randomizedUnplayed.forEach { song ->
+                candidates.add(
+                    RecommendationCandidate(
+                        song = song,
+                        sourceType = CandidateSourceType.GENRE_EXPANSION,
+                        sourceStrength = 0.55,
+                        seedSongId = null
+                    )
+                )
+            }
+        }
+
+        // 3. Fallback online charts / recommendations if available
+        val trendingSongs = runCatching { youTubeRepository.getCharts().first() }.getOrDefault(emptyList())
+        trendingSongs.filterNot { it.id in excludedSongIds }.take(15).forEach { song ->
+            candidates.add(
+                RecommendationCandidate(
+                    song = song,
+                    sourceType = CandidateSourceType.YT_RADIO,
+                    sourceStrength = 0.65,
+                    seedSongId = null
+                )
+            )
+        }
+
+        return deduplicateCandidates(candidates, excludedSongIds).take(limit)
     }
 
     private suspend fun collectFavoriteArtistCandidates(favoriteArtists: Set<String>): List<RecommendationCandidate> = coroutineScope {
@@ -178,13 +249,24 @@ class CandidateAggregator @Inject constructor(
         return results
     }
 
-    fun deduplicateCandidates(candidates: List<RecommendationCandidate>): List<RecommendationCandidate> {
+    fun deduplicateCandidates(
+        candidates: List<RecommendationCandidate>,
+        excludedSongIds: Set<String> = emptySet()
+    ): List<RecommendationCandidate> {
         val deduplicated = linkedMapOf<String, RecommendationCandidate>()
         for (candidate in candidates) {
-            val key = normalizeKey(candidate.song)
+            val song = candidate.song
+            if (song.id in excludedSongIds) continue
+            val ytId = song.youtubeId
+            if (ytId != null && ytId in excludedSongIds) continue
+
+            val key = normalizeKey(song)
             val existing = deduplicated[key]
-            if (existing == null || candidate.sourceStrength > existing.sourceStrength) {
-                deduplicated[key] = candidate
+            val safeStrength = if (candidate.sourceStrength.isNaN() || candidate.sourceStrength.isInfinite()) 0.5 else candidate.sourceStrength.coerceIn(0.0, 1.0)
+            val updatedCandidate = if (candidate.sourceStrength == safeStrength) candidate else candidate.copy(sourceStrength = safeStrength)
+
+            if (existing == null || updatedCandidate.sourceStrength > existing.sourceStrength) {
+                deduplicated[key] = updatedCandidate
             }
         }
         return deduplicated.values.toList()
