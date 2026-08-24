@@ -555,3 +555,292 @@ fun HomeArtistCard(
     }
 }
 
+@Composable
+fun HomeSongCardSkeleton(
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .width(148.dp)
+            .clip(RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp)
+        ) {
+            ShimmerBox(
+                modifier = Modifier
+                    .size(128.dp)
+                    .clip(RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ShimmerBox(
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                shape = RoundedCornerShape(4.dp)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            ShimmerBox(
+                modifier = Modifier
+                    .fillMaxWidth(0.55f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                shape = RoundedCornerShape(4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeAlbumCardSkeleton(
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .width(156.dp)
+            .clip(RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp)
+        ) {
+            ShimmerBox(
+                modifier = Modifier
+                    .size(136.dp)
+                    .clip(RoundedCornerShape(14.dp)),
+                shape = RoundedCornerShape(14.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ShimmerBox(
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                shape = RoundedCornerShape(4.dp)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            ShimmerBox(
+                modifier = Modifier
+                    .fillMaxWidth(0.50f)
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                shape = RoundedCornerShape(4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun HomeArtistCardSkeleton(
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .width(116.dp)
+            .clip(RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(10.dp)
+        ) {
+            ShimmerBox(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape),
+                shape = CircleShape
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ShimmerBox(
+                modifier = Modifier
+                    .width(72.dp)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                shape = RoundedCornerShape(4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun HorizontalSongCarouselSkeletonSection(
+    title: String? = null,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (title != null) {
+            HomeSectionHeader(
+                title = title,
+                subtitle = subtitle
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            ) {
+                Column {
+                    ShimmerBox(
+                        modifier = Modifier
+                            .width(160.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ShimmerBox(
+                        modifier = Modifier
+                            .width(100.dp)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            userScrollEnabled = false
+        ) {
+            items(5) {
+                HomeSongCardSkeleton()
+            }
+        }
+    }
+}
+
+@Composable
+fun HorizontalAlbumCarouselSkeletonSection(
+    title: String? = null,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (title != null) {
+            HomeSectionHeader(
+                title = title,
+                subtitle = subtitle
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            ) {
+                Column {
+                    ShimmerBox(
+                        modifier = Modifier
+                            .width(180.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ShimmerBox(
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            userScrollEnabled = false
+        ) {
+            items(5) {
+                HomeAlbumCardSkeleton()
+            }
+        }
+    }
+}
+
+@Composable
+fun HorizontalArtistCarouselSkeletonSection(
+    title: String? = null,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (title != null) {
+            HomeSectionHeader(
+                title = title,
+                subtitle = subtitle
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            ) {
+                Column {
+                    ShimmerBox(
+                        modifier = Modifier
+                            .width(150.dp)
+                            .height(20.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ShimmerBox(
+                        modifier = Modifier
+                            .width(90.dp)
+                            .height(12.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            userScrollEnabled = false
+        ) {
+            items(6) {
+                HomeArtistCardSkeleton()
+            }
+        }
+    }
+}
+
+

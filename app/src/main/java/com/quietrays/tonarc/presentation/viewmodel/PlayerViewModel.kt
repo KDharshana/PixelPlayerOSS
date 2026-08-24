@@ -1319,69 +1319,79 @@ class PlayerViewModel @Inject constructor(
         .map { it.toImmutableList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
+    private val _isHomeRecommendationsLoading = MutableStateFlow(false)
+    val isHomeRecommendationsLoading: StateFlow<Boolean> = _isHomeRecommendationsLoading.asStateFlow()
+
     private var homeRecommendationsJob: Job? = null
 
     fun loadHomeRecommendations(forceRefresh: Boolean = false) {
         if (homeRecommendationsJob?.isActive == true) return
         if (!forceRefresh && (_fromCommunitySongs.value.isNotEmpty() || _favoriteArtistSections.value.isNotEmpty())) return
+        _isHomeRecommendationsLoading.value = true
         homeRecommendationsJob = viewModelScope.launch {
-            // 1. YouTube browse recommendations (Explore / Home)
-            launch {
-                try {
-                    val recs = youTubeRepository.getHomeRecommendations()
-                    if (recs.fromCommunity.isNotEmpty()) {
-                        _fromCommunitySongs.value = recs.fromCommunity.toImmutableList()
+            try {
+                kotlinx.coroutines.coroutineScope {
+                    // 1. YouTube browse recommendations (Explore / Home)
+                    launch {
+                        try {
+                            val recs = youTubeRepository.getHomeRecommendations()
+                            if (recs.fromCommunity.isNotEmpty()) {
+                                _fromCommunitySongs.value = recs.fromCommunity.toImmutableList()
+                            }
+                            if (recs.trendingCommunityPlaylists.isNotEmpty()) {
+                                _trendingCommunityPlaylists.value = recs.trendingCommunityPlaylists.toImmutableList()
+                            }
+                            if (recs.featuredPlaylists.isNotEmpty()) {
+                                _featuredPlaylists.value = recs.featuredPlaylists.toImmutableList()
+                            }
+                            if (recs.mixedForYou.isNotEmpty()) {
+                                _mixedForYouPlaylists.value = recs.mixedForYou.toImmutableList()
+                            }
+                            if (recs.newAlbums.isNotEmpty()) {
+                                _newAlbums.value = recs.newAlbums.toImmutableList()
+                            }
+                            if (recs.quickPicks.isNotEmpty()) {
+                                _quickPicks.value = recs.quickPicks.toImmutableList()
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("PlayerViewModel").e(e, "Error loading browse home recommendations")
+                        }
                     }
-                    if (recs.trendingCommunityPlaylists.isNotEmpty()) {
-                        _trendingCommunityPlaylists.value = recs.trendingCommunityPlaylists.toImmutableList()
-                    }
-                    if (recs.featuredPlaylists.isNotEmpty()) {
-                        _featuredPlaylists.value = recs.featuredPlaylists.toImmutableList()
-                    }
-                    if (recs.mixedForYou.isNotEmpty()) {
-                        _mixedForYouPlaylists.value = recs.mixedForYou.toImmutableList()
-                    }
-                    if (recs.newAlbums.isNotEmpty()) {
-                        _newAlbums.value = recs.newAlbums.toImmutableList()
-                    }
-                    if (recs.quickPicks.isNotEmpty()) {
-                        _quickPicks.value = recs.quickPicks.toImmutableList()
-                    }
-                } catch (e: Exception) {
-                    Timber.tag("PlayerViewModel").e(e, "Error loading browse home recommendations")
-                }
-            }
 
-            // 2. Favorite artist individual top songs sections (up to 20 songs per artist)
-            launch {
-                try {
-                    val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
-                    if (favArtists.isNotEmpty() && (forceRefresh || _favoriteArtistSections.value.isEmpty())) {
-                        val sections = kotlinx.coroutines.coroutineScope {
-                            favArtists.take(8).map { artistName ->
-                                async {
-                                    val songs = runCatching {
-                                        youTubeRepository.searchSongsPaginated(artistName).songs.take(20)
-                                    }.getOrDefault(emptyList())
-                                    if (songs.isNotEmpty()) {
-                                        val firstArtwork = songs.firstOrNull()?.albumArtUriString
-                                        ArtistTopSongsSection(
-                                            artistName = artistName,
-                                            artistImageUrl = firstArtwork,
-                                            songs = songs.toImmutableList()
-                                        )
-                                    } else null
+                    // 2. Favorite artist individual top songs sections (up to 20 songs per artist)
+                    launch {
+                        try {
+                            val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
+                            if (favArtists.isNotEmpty() && (forceRefresh || _favoriteArtistSections.value.isEmpty())) {
+                                val sections = kotlinx.coroutines.coroutineScope {
+                                    favArtists.take(8).map { artistName ->
+                                        async {
+                                            val songs = runCatching {
+                                                youTubeRepository.searchSongsPaginated(artistName).songs.take(20)
+                                            }.getOrDefault(emptyList())
+                                            if (songs.isNotEmpty()) {
+                                                val firstArtwork = songs.firstOrNull()?.albumArtUriString
+                                                ArtistTopSongsSection(
+                                                    artistName = artistName,
+                                                    artistImageUrl = firstArtwork,
+                                                    songs = songs.toImmutableList()
+                                                )
+                                            } else null
+                                        }
+                                    }.mapNotNull { it.await() }
                                 }
-                            }.mapNotNull { it.await() }
-                        }
-                        if (sections.isNotEmpty()) {
-                            _favoriteArtistSections.value = sections.toImmutableList()
-                            _favoriteArtistsSongs.value = sections.flatMap { it.songs }.distinctBy { it.id }.toImmutableList()
+                                if (sections.isNotEmpty()) {
+                                    _favoriteArtistSections.value = sections.toImmutableList()
+                                    _favoriteArtistsSongs.value = sections.flatMap { it.songs }.distinctBy { it.id }.toImmutableList()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Timber.tag("PlayerViewModel").e(e, "Error loading favorite artists recommendations")
                         }
                     }
-                } catch (e: Exception) {
-                    Timber.tag("PlayerViewModel").e(e, "Error loading favorite artists recommendations")
                 }
+            } finally {
+                _isHomeRecommendationsLoading.value = false
             }
         }
     }

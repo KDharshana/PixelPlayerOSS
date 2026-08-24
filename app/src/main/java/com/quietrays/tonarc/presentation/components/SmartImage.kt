@@ -116,68 +116,59 @@ fun SmartImage(
         }
     }
 
-    if (onState != null || placeholderModel != null) {
-        SubcomposeAsyncImage(
-            model = request,
-            contentDescription = contentDescription,
-            modifier = clippedModifier,
-            contentScale = contentScale,
-            colorFilter = colorFilter,
-            alpha = alpha
-        ) {
-            val state = painter.state
-            LaunchedEffect(state) {
-                onState?.invoke(state)
-            }
+    SubcomposeAsyncImage(
+        model = request,
+        contentDescription = contentDescription,
+        modifier = clippedModifier,
+        contentScale = contentScale,
+        colorFilter = colorFilter,
+        alpha = alpha
+    ) {
+        val state = painter.state
+        LaunchedEffect(state) {
+            onState?.invoke(state)
+        }
 
-            when (state) {
-                is AsyncImagePainter.State.Success -> {
-                    SubcomposeAsyncImageContent()
-                }
-                is AsyncImagePainter.State.Loading -> {
-                    if (placeholderModel != null) {
-                        AsyncImage(
-                            model = placeholderModel,
-                            contentDescription = null,
+        when (state) {
+            is AsyncImagePainter.State.Success -> {
+                SubcomposeAsyncImageContent()
+            }
+            is AsyncImagePainter.State.Loading -> {
+                if (placeholderModel != null) {
+                    AsyncImage(
+                        model = placeholderModel,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = contentScale,
+                        colorFilter = colorFilter,
+                        alpha = alpha
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(placeHolderBackgroundColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ShimmerBox(
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = contentScale,
-                            colorFilter = colorFilter,
-                            alpha = alpha
-                        )
-                    } else {
-                        Placeholder(
-                            modifier = Modifier.fillMaxSize(),
-                            drawableResId = placeholderResId,
-                            contentDescription = contentDescription,
-                            containerColor = placeHolderBackgroundColor,
-                            iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            alpha = alpha
+                            shape = shape,
+                            baseColor = placeHolderBackgroundColor
                         )
                     }
                 }
-                else -> {
-                    Placeholder(
-                        modifier = Modifier.fillMaxSize(),
-                        drawableResId = if (state is AsyncImagePainter.State.Error) errorResId else placeholderResId,
-                        contentDescription = contentDescription,
-                        containerColor = placeHolderBackgroundColor,
-                        iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        alpha = alpha
-                    )
-                }
+            }
+            else -> {
+                Placeholder(
+                    modifier = Modifier.fillMaxSize(),
+                    drawableResId = if (state is AsyncImagePainter.State.Error) errorResId else placeholderResId,
+                    contentDescription = contentDescription,
+                    containerColor = placeHolderBackgroundColor,
+                    iconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    alpha = alpha
+                )
             }
         }
-    } else {
-        AsyncImage(
-            model = request,
-            contentDescription = contentDescription,
-            modifier = clippedModifier,
-            contentScale = contentScale,
-            colorFilter = colorFilter,
-            alpha = alpha,
-            placeholder = painterResource(placeholderResId),
-            error = painterResource(errorResId)
-        )
     }
 }
 

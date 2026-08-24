@@ -61,6 +61,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -98,12 +99,16 @@ import com.quietrays.tonarc.presentation.components.DailyMixSection
 import com.quietrays.tonarc.presentation.components.HomeGradientTopBar
 import com.quietrays.tonarc.presentation.components.HomeOptionsBottomSheet
 import com.quietrays.tonarc.presentation.components.HorizontalAlbumCarouselSection
+import com.quietrays.tonarc.presentation.components.HorizontalAlbumCarouselSkeletonSection
 import com.quietrays.tonarc.presentation.components.HorizontalArtistCarouselSection
+import com.quietrays.tonarc.presentation.components.HorizontalArtistCarouselSkeletonSection
 import com.quietrays.tonarc.presentation.components.HorizontalPlaylistCarouselSection
 import com.quietrays.tonarc.presentation.components.HorizontalSongCarouselSection
+import com.quietrays.tonarc.presentation.components.HorizontalSongCarouselSkeletonSection
 import com.quietrays.tonarc.presentation.components.MiniPlayerHeight
 import com.quietrays.tonarc.presentation.components.RecentlyPlayedSection
 import com.quietrays.tonarc.presentation.components.RecentlyPlayedSectionMinSongsToShow
+import com.quietrays.tonarc.presentation.components.ShimmerBox
 import com.quietrays.tonarc.presentation.components.SmartImage
 import com.quietrays.tonarc.presentation.components.StatsOverviewCard
 import com.quietrays.tonarc.presentation.components.resolveMainScreenBottomGradientHeight
@@ -169,6 +174,7 @@ fun HomeScreen(
     val favoriteArtists by playerViewModel.favoriteArtists.collectAsStateWithLifecycle()
     val favoriteArtistSections by playerViewModel.favoriteArtistSections.collectAsStateWithLifecycle()
     val favoriteArtistsSongs by playerViewModel.favoriteArtistsSongs.collectAsStateWithLifecycle()
+    val isHomeRecommendationsLoading by playerViewModel.isHomeRecommendationsLoading.collectAsStateWithLifecycle()
     val artistImages = remember(favoriteArtistSections) {
         favoriteArtistSections.associate { it.artistName to it.artistImageUrl }
     }
@@ -536,37 +542,61 @@ fun HomeScreen(
                     }
                 }
 
-                if (quickPicks.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
-                    item(
-                        key = "quick_picks_section",
-                        contentType = "quick_picks_section"
-                    ) {
-                        HorizontalSongCarouselSection(
-                            title = "Quick Picks",
-                            subtitle = "Instant radio & top tracks from YouTube Music",
-                            songs = quickPicks,
-                            currentPlayingSongId = currentSong?.id,
-                            isPlaying = isPlaying,
-                            onSongClick = { song ->
-                                playerViewModel.playSongWithSmartQueue(song, "Quick Picks")
-                            }
-                        )
+                if (selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
+                    if (quickPicks.isNotEmpty()) {
+                        item(
+                            key = "quick_picks_section",
+                            contentType = "quick_picks_section"
+                        ) {
+                            HorizontalSongCarouselSection(
+                                title = "Quick Picks",
+                                subtitle = "Instant radio & top tracks from YouTube Music",
+                                songs = quickPicks,
+                                currentPlayingSongId = currentSong?.id,
+                                isPlaying = isPlaying,
+                                onSongClick = { song ->
+                                    playerViewModel.playSongWithSmartQueue(song, "Quick Picks")
+                                }
+                            )
+                        }
+                    } else if (isHomeRecommendationsLoading) {
+                        item(
+                            key = "quick_picks_skeleton",
+                            contentType = "quick_picks_skeleton"
+                        ) {
+                            HorizontalSongCarouselSkeletonSection(
+                                title = "Quick Picks",
+                                subtitle = "Instant radio & top tracks from YouTube Music"
+                            )
+                        }
                     }
                 }
 
-                if (newAlbums.isNotEmpty() && selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
-                    item(
-                        key = "new_albums_section",
-                        contentType = "new_albums_section"
-                    ) {
-                        HorizontalAlbumCarouselSection(
-                            title = "New Releases & Singles",
-                            subtitle = "Latest albums and tracks on YouTube Music",
-                            albums = newAlbums,
-                            onAlbumClick = { album ->
-                                navController.navigateSafely(Screen.AlbumDetail.createRoute(album.id))
-                            }
-                        )
+                if (selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
+                    if (newAlbums.isNotEmpty()) {
+                        item(
+                            key = "new_albums_section",
+                            contentType = "new_albums_section"
+                        ) {
+                            HorizontalAlbumCarouselSection(
+                                title = "New Releases & Singles",
+                                subtitle = "Latest albums and tracks on YouTube Music",
+                                albums = newAlbums,
+                                onAlbumClick = { album ->
+                                    navController.navigateSafely(Screen.AlbumDetail.createRoute(album.id))
+                                }
+                            )
+                        }
+                    } else if (isHomeRecommendationsLoading) {
+                        item(
+                            key = "new_albums_skeleton",
+                            contentType = "new_albums_skeleton"
+                        ) {
+                            HorizontalAlbumCarouselSkeletonSection(
+                                title = "New Releases & Singles",
+                                subtitle = "Latest albums and tracks on YouTube Music"
+                            )
+                        }
                     }
                 }
 
@@ -866,20 +896,62 @@ fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun YourMixLoadingPlaceholder() {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(256.dp)
-            .padding(16.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
-        LoadingIndicator(
-            modifier = Modifier.size(128.dp),
-            color = MaterialTheme.colorScheme.primary
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ShimmerBox(
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(24.dp)
+                    .clip(RoundedCornerShape(6.dp)),
+                shape = RoundedCornerShape(6.dp)
+            )
+            ShimmerBox(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape),
+                shape = androidx.compose.foundation.shape.CircleShape
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(380.dp)
+                .clip(AbsoluteSmoothCornerShape(24.dp, 60)),
+            shape = AbsoluteSmoothCornerShape(24.dp, 60),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            )
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                ShimmerBox(
+                    modifier = Modifier.fillMaxSize()
+                )
+                Icon(
+                    imageVector = Icons.Rounded.MusicNote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f),
+                    modifier = Modifier.size(72.dp)
+                )
+            }
+        }
     }
 }
 
