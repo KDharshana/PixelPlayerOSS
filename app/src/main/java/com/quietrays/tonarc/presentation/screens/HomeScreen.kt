@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -161,7 +162,11 @@ fun HomeScreen(
     val newAlbums by playerViewModel.newAlbums.collectAsStateWithLifecycle()
     val quickPicks by playerViewModel.quickPicks.collectAsStateWithLifecycle()
     val favoriteArtists by playerViewModel.favoriteArtists.collectAsStateWithLifecycle()
+    val favoriteArtistSections by playerViewModel.favoriteArtistSections.collectAsStateWithLifecycle()
     val favoriteArtistsSongs by playerViewModel.favoriteArtistsSongs.collectAsStateWithLifecycle()
+    val artistImages = remember(favoriteArtistSections) {
+        favoriteArtistSections.associate { it.artistName to it.artistImageUrl }
+    }
     var selectedHomeFilter by rememberSaveable { mutableStateOf(HomeFilter.ALL) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -533,14 +538,38 @@ fun HomeScreen(
                             title = stringResource(R.string.home_section_favorite_artists),
                             subtitle = stringResource(R.string.home_section_favorite_artists_subtitle),
                             artists = favoriteArtists.toList(),
-                            onArtistClick = { _ ->
+                            artistImages = artistImages,
+                            onArtistClick = { artistName ->
+                                playerViewModel.updateSearchQuery(artistName)
+                                playerViewModel.onSearchQuerySubmitted(artistName)
                                 navController.navigateSafely(Screen.Search.route)
                             }
                         )
                     }
                 }
 
-                if (favoriteArtistsSongs.isNotEmpty()) {
+                if (favoriteArtistSections.isNotEmpty()) {
+                    items(
+                        items = favoriteArtistSections,
+                        key = { "fav_artist_section_${it.artistName}" },
+                        contentType = { "fav_artist_top_songs_section" }
+                    ) { section ->
+                        HorizontalSongCarouselSection(
+                            title = section.artistName,
+                            subtitle = "Top songs for you",
+                            songs = section.songs,
+                            currentPlayingSongId = currentSong?.id,
+                            isPlaying = isPlaying,
+                            onSongClick = { song ->
+                                playerViewModel.showAndPlaySong(
+                                    song,
+                                    section.songs,
+                                    "Top Songs • ${section.artistName}"
+                                )
+                            }
+                        )
+                    }
+                } else if (favoriteArtistsSongs.isNotEmpty()) {
                     item(
                         key = "favorite_artists_songs_section",
                         contentType = "favorite_artists_songs_section"

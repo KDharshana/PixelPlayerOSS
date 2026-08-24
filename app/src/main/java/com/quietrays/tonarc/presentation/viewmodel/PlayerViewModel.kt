@@ -1297,6 +1297,15 @@ class PlayerViewModel @Inject constructor(
     val favoriteArtists: StateFlow<Set<String>> = userPreferencesRepository.favoriteArtistsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
+    data class ArtistTopSongsSection(
+        val artistName: String,
+        val artistImageUrl: String? = null,
+        val songs: ImmutableList<Song> = persistentListOf()
+    )
+
+    private val _favoriteArtistSections = MutableStateFlow<ImmutableList<ArtistTopSongsSection>>(persistentListOf())
+    val favoriteArtistSections: StateFlow<ImmutableList<ArtistTopSongsSection>> = _favoriteArtistSections.asStateFlow()
+
     private val _favoriteArtistsSongs = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
     val favoriteArtistsSongs: StateFlow<ImmutableList<Song>> = _favoriteArtistsSongs.asStateFlow()
 
@@ -1311,7 +1320,7 @@ class PlayerViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
     fun loadHomeRecommendations(forceRefresh: Boolean = false) {
-        if (!forceRefresh && _fromCommunitySongs.value.isNotEmpty()) return
+        if (!forceRefresh && _fromCommunitySongs.value.isNotEmpty() && _favoriteArtistSections.value.isNotEmpty()) return
         viewModelScope.launch {
             // 1. YouTube browse recommendations (Explore / Home)
             launch {
@@ -1340,22 +1349,31 @@ class PlayerViewModel @Inject constructor(
                 }
             }
 
-            // 2. Favorite artist mixes (independent of browse feed)
+            // 2. Favorite artist individual top songs sections
             launch {
                 try {
                     val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
                     if (favArtists.isNotEmpty()) {
-                        val collectedSongs = kotlinx.coroutines.coroutineScope {
+                        val sections = kotlinx.coroutines.coroutineScope {
                             favArtists.take(8).map { artistName ->
                                 async {
-                                    runCatching {
-                                        youTubeRepository.searchSongsPaginated(artistName).songs.take(3)
+                                    val songs = runCatching {
+                                        youTubeRepository.searchSongsPaginated(artistName).songs.take(6)
                                     }.getOrDefault(emptyList())
+                                    if (songs.isNotEmpty()) {
+                                        val firstArtwork = songs.firstOrNull()?.albumArtUriString
+                                        ArtistTopSongsSection(
+                                            artistName = artistName,
+                                            artistImageUrl = firstArtwork,
+                                            songs = songs.toImmutableList()
+                                        )
+                                    } else null
                                 }
-                            }.flatMap { it.await() }
+                            }.mapNotNull { it.await() }
                         }
-                        if (collectedSongs.isNotEmpty()) {
-                            _favoriteArtistsSongs.value = collectedSongs.distinctBy { it.id }.toImmutableList()
+                        if (sections.isNotEmpty()) {
+                            _favoriteArtistSections.value = sections.toImmutableList()
+                            _favoriteArtistsSongs.value = sections.flatMap { it.songs }.distinctBy { it.id }.toImmutableList()
                         }
                     }
                 } catch (e: Exception) {

@@ -447,6 +447,7 @@ fun HorizontalArtistCarouselSection(
     title: String,
     subtitle: String? = null,
     artists: List<String>,
+    artistImages: Map<String, String?> = emptyMap(),
     onArtistClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -472,6 +473,7 @@ fun HorizontalArtistCarouselSection(
             ) { _, artistName ->
                 HomeArtistCard(
                     artistName = artistName,
+                    imageUrl = artistImages[artistName],
                     onClick = { onArtistClick(artistName) }
                 )
             }
@@ -482,6 +484,7 @@ fun HorizontalArtistCarouselSection(
 @Composable
 fun HomeArtistCard(
     artistName: String,
+    imageUrl: String? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -508,7 +511,7 @@ fun HomeArtistCard(
                 contentAlignment = Alignment.Center
             ) {
                 SmartImage(
-                    model = null,
+                    model = imageUrl,
                     contentDescription = artistName,
                     shape = CircleShape,
                     placeholderResId = R.drawable.ic_music_placeholder,
