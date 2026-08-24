@@ -42,6 +42,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -61,8 +64,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
@@ -323,6 +328,26 @@ fun HomeScreen(
     }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullToRefreshState = rememberPullToRefreshState()
+    val haptic = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+
+    val onHomeRefresh: () -> Unit = {
+        isRefreshing = true
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        coroutineScope.launch {
+            try {
+                homePlaceholderRefreshGeneration++
+                settingsViewModel.refreshLibrary()
+                playerViewModel.forceUpdateDailyMix()
+                playerViewModel.loadHomeRecommendations(forceRefresh = true)
+                delay(600)
+            } finally {
+                isRefreshing = false
+            }
+        }
+    }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -349,18 +374,34 @@ fun HomeScreen(
                 )
             }
         ) { innerPadding ->
-            LazyColumn(
-                state = listState,
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onHomeRefresh,
+                state = pullToRefreshState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background),
-                contentPadding = PaddingValues(
-                    top = innerPadding.calculateTopPadding(),
-                    bottom = paddingValuesParent.calculateBottomPadding()
-                            + 38.dp + bottomPadding
-                ),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                    .padding(top = innerPadding.calculateTopPadding()),
+                indicator = {
+                    PullToRefreshDefaults.LoadingIndicator(
+                        state = pullToRefreshState,
+                        isRefreshing = isRefreshing,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                    contentPadding = PaddingValues(
+                        bottom = paddingValuesParent.calculateBottomPadding()
+                                + 38.dp + bottomPadding
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
                 item(
                     key = "home_filter_chips_row",
                     contentType = "home_filter_chips_row"
@@ -748,6 +789,7 @@ fun HomeScreen(
                 }
             }
         }
+    }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
