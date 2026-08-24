@@ -540,7 +540,8 @@ interface MusicDao {
      */
     @Query("""
         SELECT * FROM songs
-        WHERE (:applyDirectoryFilter = 0 OR id < 0 OR parent_directory_path IN (:allowedParentDirs))
+        WHERE (:applyDirectoryFilter = 0 OR parent_directory_path IN (:allowedParentDirs))
+        AND source_type = 0
         ORDER BY RANDOM()
         LIMIT :limit
     """)

@@ -446,14 +446,15 @@ fun HomeScreen(
                                 song = yourMixSong,
                                 isShuffleEnabled = isShuffleEnabled,
                                 onPlayShuffled = {
-                                    if (usesFallbackHomeMix) {
-                                        playerViewModel.shuffleAllSongs(queueName = "Your Mix")
-                                    } else {
+                                    val localMix = yourMixSongs.filter { it.isLocal }
+                                    if (localMix.isNotEmpty()) {
                                         playerViewModel.playSongsShuffled(
-                                            songsToPlay = yourMixSongs,
+                                            songsToPlay = localMix,
                                             queueName = "Your Mix",
                                             startAtZero = true,
                                         )
+                                    } else {
+                                        playerViewModel.shuffleAllSongs(queueName = "Your Mix")
                                     }
                                 }
                             )
