@@ -61,20 +61,6 @@ data class Song(
             ?: artists.firstOrNull()
             ?: ArtistRef(id = artistId, name = artist, isPrimary = true)
 
-    /**
-     * Returns true if this is a local device audio file (not a cloud/streaming track).
-     */
-    val isLocal: Boolean
-        get() = youtubeId == null &&
-                navidromeId == null &&
-                jellyfinId == null &&
-                !contentUriString.startsWith("youtube://") &&
-                !contentUriString.startsWith("navidrome://") &&
-                !contentUriString.startsWith("jellyfin://") &&
-                !id.startsWith("youtube_") &&
-                !id.startsWith("nav_") &&
-                !id.startsWith("jelly_")
-
     companion object {
         fun emptySong(): Song {
             return Song(

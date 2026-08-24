@@ -1319,12 +1319,9 @@ class PlayerViewModel @Inject constructor(
         .map { it.toImmutableList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
-    private var homeRecommendationsJob: Job? = null
-
     fun loadHomeRecommendations(forceRefresh: Boolean = false) {
-        if (homeRecommendationsJob?.isActive == true) return
-        if (!forceRefresh && (_fromCommunitySongs.value.isNotEmpty() || _favoriteArtistSections.value.isNotEmpty())) return
-        homeRecommendationsJob = viewModelScope.launch {
+        if (!forceRefresh && _fromCommunitySongs.value.isNotEmpty() && _favoriteArtistSections.value.isNotEmpty()) return
+        viewModelScope.launch {
             // 1. YouTube browse recommendations (Explore / Home)
             launch {
                 try {
@@ -1352,13 +1349,13 @@ class PlayerViewModel @Inject constructor(
                 }
             }
 
-            // 2. Favorite artist individual top songs sections (load once or on forceRefresh)
+            // 2. Favorite artist individual top songs sections
             launch {
                 try {
                     val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
-                    if (favArtists.isNotEmpty() && (forceRefresh || _favoriteArtistSections.value.isEmpty())) {
+                    if (favArtists.isNotEmpty()) {
                         val sections = kotlinx.coroutines.coroutineScope {
-                            favArtists.take(6).map { artistName ->
+                            favArtists.take(8).map { artistName ->
                                 async {
                                     val songs = runCatching {
                                         youTubeRepository.searchSongsPaginated(artistName).songs.take(6)
@@ -1404,10 +1401,6 @@ class PlayerViewModel @Inject constructor(
         }.distinctUntilChanged()
     }
 
-    fun observeSongWithFavorite(songId: String): Flow<Song?> {
-        return observeSong(songId)
-    }
-
     private fun updateDailyMix() {
         dailyMixStateHolder.updateDailyMix(
             favoriteSongIdsFlow = favoriteSongIds
@@ -1419,10 +1412,8 @@ class PlayerViewModel @Inject constructor(
         
         viewModelScope.launch {
             val randomSongs = musicRepository.getRandomSongs(limit = 500)
-            val localSongs = randomSongs.filter { it.isLocal }
-            val songsToPlay = if (localSongs.isNotEmpty()) localSongs else randomSongs
-            if (songsToPlay.isNotEmpty()) {
-                playSongsShuffled(songsToPlay, queueName, startAtZero = true)
+            if (randomSongs.isNotEmpty()) {
+                playSongsShuffled(randomSongs, queueName, startAtZero = true)
             }
         }
     }
