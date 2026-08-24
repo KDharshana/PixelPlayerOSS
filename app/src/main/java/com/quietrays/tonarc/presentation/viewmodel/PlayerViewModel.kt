@@ -88,6 +88,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -1311,42 +1313,54 @@ class PlayerViewModel @Inject constructor(
     fun loadHomeRecommendations(forceRefresh: Boolean = false) {
         if (!forceRefresh && _fromCommunitySongs.value.isNotEmpty()) return
         viewModelScope.launch {
-            try {
-                val recs = youTubeRepository.getHomeRecommendations()
-                if (recs.fromCommunity.isNotEmpty()) {
-                    _fromCommunitySongs.value = recs.fromCommunity.toImmutableList()
+            // 1. YouTube browse recommendations (Explore / Home)
+            launch {
+                try {
+                    val recs = youTubeRepository.getHomeRecommendations()
+                    if (recs.fromCommunity.isNotEmpty()) {
+                        _fromCommunitySongs.value = recs.fromCommunity.toImmutableList()
+                    }
+                    if (recs.trendingCommunityPlaylists.isNotEmpty()) {
+                        _trendingCommunityPlaylists.value = recs.trendingCommunityPlaylists.toImmutableList()
+                    }
+                    if (recs.featuredPlaylists.isNotEmpty()) {
+                        _featuredPlaylists.value = recs.featuredPlaylists.toImmutableList()
+                    }
+                    if (recs.mixedForYou.isNotEmpty()) {
+                        _mixedForYouPlaylists.value = recs.mixedForYou.toImmutableList()
+                    }
+                    if (recs.newAlbums.isNotEmpty()) {
+                        _newAlbums.value = recs.newAlbums.toImmutableList()
+                    }
+                    if (recs.quickPicks.isNotEmpty()) {
+                        _quickPicks.value = recs.quickPicks.toImmutableList()
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("PlayerViewModel").e(e, "Error loading browse home recommendations")
                 }
-                if (recs.trendingCommunityPlaylists.isNotEmpty()) {
-                    _trendingCommunityPlaylists.value = recs.trendingCommunityPlaylists.toImmutableList()
-                }
-                if (recs.featuredPlaylists.isNotEmpty()) {
-                    _featuredPlaylists.value = recs.featuredPlaylists.toImmutableList()
-                }
-                if (recs.mixedForYou.isNotEmpty()) {
-                    _mixedForYouPlaylists.value = recs.mixedForYou.toImmutableList()
-                }
-                if (recs.newAlbums.isNotEmpty()) {
-                    _newAlbums.value = recs.newAlbums.toImmutableList()
-                }
-                if (recs.quickPicks.isNotEmpty()) {
-                    _quickPicks.value = recs.quickPicks.toImmutableList()
-                }
+            }
 
-                val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
-                if (favArtists.isNotEmpty()) {
-                    val collectedSongs = mutableListOf<Song>()
-                    for (artistName in favArtists.take(8)) {
-                        val songs = runCatching {
-                            youTubeRepository.searchSongsPaginated(artistName).songs.take(2)
-                        }.getOrDefault(emptyList())
-                        collectedSongs.addAll(songs)
+            // 2. Favorite artist mixes (independent of browse feed)
+            launch {
+                try {
+                    val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
+                    if (favArtists.isNotEmpty()) {
+                        val collectedSongs = kotlinx.coroutines.coroutineScope {
+                            favArtists.take(8).map { artistName ->
+                                async {
+                                    runCatching {
+                                        youTubeRepository.searchSongsPaginated(artistName).songs.take(3)
+                                    }.getOrDefault(emptyList())
+                                }
+                            }.flatMap { it.await() }
+                        }
+                        if (collectedSongs.isNotEmpty()) {
+                            _favoriteArtistsSongs.value = collectedSongs.distinctBy { it.id }.toImmutableList()
+                        }
                     }
-                    if (collectedSongs.isNotEmpty()) {
-                        _favoriteArtistsSongs.value = collectedSongs.distinctBy { it.id }.toImmutableList()
-                    }
+                } catch (e: Exception) {
+                    Timber.tag("PlayerViewModel").e(e, "Error loading favorite artists recommendations")
                 }
-            } catch (e: Exception) {
-                Timber.tag("PlayerViewModel").e(e, "Error loading home recommendations")
             }
         }
     }

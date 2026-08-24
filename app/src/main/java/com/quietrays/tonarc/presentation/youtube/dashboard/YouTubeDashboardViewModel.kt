@@ -84,11 +84,14 @@ class YouTubeDashboardViewModel @Inject constructor(
                     .collect { sections ->
                         cachedSections = sections
                         cachedCharts = sections.flatMap { it.tracks }.map { track ->
+                            val syntheticArtistId = if (track.artist.isNotBlank()) {
+                                -Math.abs(track.artist.hashCode().toLong().takeIf { it != 0L } ?: 1L)
+                            } else 0L
                             Song(
                                 id = "youtube_${track.videoId}",
                                 title = track.title,
                                 artist = track.artist,
-                                artistId = 0L,
+                                artistId = syntheticArtistId,
                                 album = track.album ?: "YouTube Music",
                                 albumId = 0L,
                                 albumArtist = track.artist,
@@ -109,16 +112,17 @@ class YouTubeDashboardViewModel @Inject constructor(
                                 cachedEngagements = allEngagements.associateBy { it.songId }
                                 cachedTunedWeights = adaptiveWeightTuner.computeTunedWeights(allEngagements)
 
-                                if (allEngagements.size >= 20) {
-                                    val topSongs = engagementDao.getTopPlayedSongs(10)
-                                    val recentSongs = engagementDao.getRecentlyPlayedSongs(10)
-                                    val seedIds = (topSongs + recentSongs).map { it.songId }.toSet()
-                                    val allAudioSongs = musicRepository.getAudioFiles().first()
-                                    val seedSongs = allAudioSongs.filter { it.id in seedIds }
-                                    cachedCandidates = candidateAggregator.collect(seedSongs, limit = 60)
-                                } else {
-                                    cachedCandidates = emptyList()
-                                }
+                                val topSongs = engagementDao.getTopPlayedSongs(10)
+                                val recentSongs = engagementDao.getRecentlyPlayedSongs(10)
+                                val seedIds = (topSongs + recentSongs).map { it.songId }.toSet()
+                                val allAudioSongs = runCatching { musicRepository.getAllSongsOnce() }.getOrDefault(emptyList())
+                                val localSeedSongs = allAudioSongs.filter { it.id in seedIds }
+                                val chartSeeds = cachedCharts.filter { it.id in seedIds }
+                                val seedSongs = (localSeedSongs + chartSeeds).distinctBy { it.id }
+
+                                cachedCandidates = candidateAggregator.collect(seedSongs, limit = 60)
+                            }.onFailure {
+                                Timber.tag("YouTubeDashboardVM").e(it, "Failed to compute recommendation candidates")
                             }
                         }
 

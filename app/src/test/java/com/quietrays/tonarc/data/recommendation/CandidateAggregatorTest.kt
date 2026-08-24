@@ -55,4 +55,34 @@ class CandidateAggregatorTest {
         assertThat(deduplicated.first().sourceType).isEqualTo(CandidateSourceType.YT_RADIO)
         assertThat(deduplicated.first().sourceStrength).isEqualTo(0.9)
     }
+
+    @Test
+    fun `deduplicateCandidates normalizes youtube IDs across uri prefixes`() {
+        val song1 = testSong("youtube_abc123", "Track X", "Artist X").copy(youtubeId = "abc123")
+        val song2 = testSong("custom_id", "Track X", "Artist X").copy(contentUriString = "youtube://abc123")
+
+        val candidate1 = RecommendationCandidate(
+            song = song1,
+            sourceType = CandidateSourceType.YT_RADIO,
+            sourceStrength = 0.7
+        )
+
+        val candidate2 = RecommendationCandidate(
+            song = song2,
+            sourceType = CandidateSourceType.YT_RADIO,
+            sourceStrength = 0.95
+        )
+
+        val aggregator = CandidateAggregator(
+            youTubeRepository = mockk<YouTubeRepository>(relaxed = true),
+            listenBrainzRepository = mockk<ListenBrainzRepository>(relaxed = true),
+            musicRepository = mockk<MusicRepository>(relaxed = true),
+            itemEmbeddingStore = mockk<ItemEmbeddingStore>(relaxed = true),
+            userPreferencesRepository = mockk(relaxed = true)
+        )
+
+        val deduplicated = aggregator.deduplicateCandidates(listOf(candidate1, candidate2))
+        assertThat(deduplicated).hasSize(1)
+        assertThat(deduplicated.first().sourceStrength).isEqualTo(0.95)
+    }
 }

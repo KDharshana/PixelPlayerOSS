@@ -73,22 +73,22 @@ class CandidateAggregator @Inject constructor(
         deduplicateCandidates(allCandidates).take(limit)
     }
 
-    private suspend fun collectFavoriteArtistCandidates(favoriteArtists: Set<String>): List<RecommendationCandidate> {
-        val results = mutableListOf<RecommendationCandidate>()
-        for (artist in favoriteArtists.take(5)) {
-            val songs = runCatching { youTubeRepository.searchSongsPaginated(artist).songs }.getOrDefault(emptyList())
-            for (song in songs.take(3)) {
-                results.add(
+    private suspend fun collectFavoriteArtistCandidates(favoriteArtists: Set<String>): List<RecommendationCandidate> = coroutineScope {
+        val artistsToFetch = favoriteArtists.take(8)
+        val deferredList = artistsToFetch.map { artist ->
+            async {
+                val songs = runCatching { youTubeRepository.searchSongsPaginated(artist).songs }.getOrDefault(emptyList())
+                songs.take(4).map { song ->
                     RecommendationCandidate(
                         song = song,
                         sourceType = CandidateSourceType.LB_SIMILAR_ARTIST,
                         sourceStrength = 0.85,
                         seedSongId = null
                     )
-                )
+                }
             }
         }
-        return results
+        deferredList.flatMap { runCatching { it.await() }.getOrDefault(emptyList()) }
     }
 
     private suspend fun collectCooccurrenceCandidates(seeds: List<Song>): List<RecommendationCandidate> {
@@ -113,46 +113,47 @@ class CandidateAggregator @Inject constructor(
         return results
     }
 
-    private suspend fun collectYouTubeRadioCandidates(seeds: List<Song>): List<RecommendationCandidate> {
-        val results = mutableListOf<RecommendationCandidate>()
-        for (seed in seeds.take(3)) {
-            val radioTracks = runCatching { youTubeRepository.getRadioTracksForSong(seed) }.getOrDefault(emptyList())
-            radioTracks.forEach { track ->
-                results.add(
+    private suspend fun collectYouTubeRadioCandidates(seeds: List<Song>): List<RecommendationCandidate> = coroutineScope {
+        val deferredList = seeds.take(5).map { seed ->
+            async {
+                val radioTracks = runCatching { youTubeRepository.getRadioTracksForSong(seed) }.getOrDefault(emptyList())
+                radioTracks.map { track ->
                     RecommendationCandidate(
                         song = track,
                         sourceType = CandidateSourceType.YT_RADIO,
                         sourceStrength = 0.85,
                         seedSongId = seed.id
                     )
-                )
-            }
-        }
-        return results
-    }
-
-    private suspend fun collectListenBrainzCandidates(seeds: List<Song>): List<RecommendationCandidate> {
-        val results = mutableListOf<RecommendationCandidate>()
-        for (seed in seeds) {
-            val artistName = seed.artist.trim().takeIf { it.isNotBlank() } ?: continue
-            val recordings = runCatching { listenBrainzRepository.getLbRadioTracks(artistName) }.getOrDefault(emptyList())
-            for (rec in recordings.take(3)) {
-                val query = "${rec.trackName} ${rec.artistName}".trim()
-                if (query.isBlank()) continue
-                val songs = runCatching { youTubeRepository.searchSongsPaginated(query).songs }.getOrDefault(emptyList())
-                songs.firstOrNull()?.let { song ->
-                    results.add(
-                        RecommendationCandidate(
-                            song = song,
-                            sourceType = CandidateSourceType.LB_SIMILAR_ARTIST,
-                            sourceStrength = 0.80,
-                            seedSongId = seed.id
-                        )
-                    )
                 }
             }
         }
-        return results
+        deferredList.flatMap { runCatching { it.await() }.getOrDefault(emptyList()) }
+    }
+
+    private suspend fun collectListenBrainzCandidates(seeds: List<Song>): List<RecommendationCandidate> = coroutineScope {
+        val deferredList = seeds.take(5).map { seed ->
+            async {
+                val artistName = seed.artist.trim().takeIf { it.isNotBlank() } ?: return@async emptyList()
+                val recordings = runCatching { listenBrainzRepository.getLbRadioTracks(artistName) }.getOrDefault(emptyList())
+                val innerDeferred = recordings.take(3).map { rec ->
+                    async {
+                        val query = "${rec.trackName} ${rec.artistName}".trim()
+                        if (query.isBlank()) return@async null
+                        val songs = runCatching { youTubeRepository.searchSongsPaginated(query).songs }.getOrDefault(emptyList())
+                        songs.firstOrNull()?.let { song ->
+                            RecommendationCandidate(
+                                song = song,
+                                sourceType = CandidateSourceType.LB_SIMILAR_ARTIST,
+                                sourceStrength = 0.80,
+                                seedSongId = seed.id
+                            )
+                        }
+                    }
+                }
+                innerDeferred.mapNotNull { runCatching { it.await() }.getOrNull() }
+            }
+        }
+        deferredList.flatMap { runCatching { it.await() }.getOrDefault(emptyList()) }
     }
 
     private suspend fun collectGenreCandidates(seeds: List<Song>): List<RecommendationCandidate> {
@@ -191,6 +192,8 @@ class CandidateAggregator @Inject constructor(
 
     private fun normalizeKey(song: Song): String {
         val ytid = song.youtubeId?.takeIf { it.isNotBlank() }
+            ?: song.contentUriString.takeIf { it.startsWith("youtube://") }?.removePrefix("youtube://")
+            ?: song.id.takeIf { it.startsWith("youtube_") }?.removePrefix("youtube_")
         if (ytid != null) return "yt::$ytid"
         val navId = song.navidromeId?.takeIf { it.isNotBlank() }
         if (navId != null) return "nav::$navId"

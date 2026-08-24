@@ -313,21 +313,21 @@ class DailyMixManager @Inject constructor(
         val songById = allSongs.associateBy { it.id }
         val now = System.currentTimeMillis()
 
-        val artistAffinity = mutableMapOf<Long, Double>()
+        val artistAffinity = mutableMapOf<String, Double>()
         val genreAffinity = mutableMapOf<String, Double>()
 
         engagements.forEach { (songId, stats) ->
             val song = songById[songId] ?: return@forEach
             val weight = stats.playCount.toDouble() + (stats.totalPlayDurationMs / 60000.0)
             if (weight <= 0) return@forEach
-            artistAffinity.merge(song.artistId, weight, Double::plus)
+            artistAffinity.merge(artistKey(song), weight, Double::plus)
             normalizeGenreKey(song.genre)?.let { genreAffinity.merge(it, weight, Double::plus) }
         }
 
-        val favoriteArtistWeights = mutableMapOf<Long, Int>()
+        val favoriteArtistWeights = mutableMapOf<String, Int>()
         favoriteSongIds.forEach { id ->
             val song = songById[id] ?: return@forEach
-            favoriteArtistWeights.merge(song.artistId, 1, Int::plus)
+            favoriteArtistWeights.merge(artistKey(song), 1, Int::plus)
         }
 
         val maxPlayCount = engagements.values.maxOfOrNull { it.playCount }?.takeIf { it > 0 } ?: 1
@@ -342,10 +342,11 @@ class DailyMixManager @Inject constructor(
             val durationScore = (stats?.totalPlayDurationMs?.toDouble() ?: 0.0) / maxDuration
             val affinityScore = (playCountScore * 0.7 + durationScore * 0.3).coerceIn(0.0, 1.0)
 
+            val aKey = artistKey(song)
             val genreKey = normalizeGenreKey(song.genre)
-            val artistPreference = artistAffinity[song.artistId]?.div(maxArtistAffinity) ?: 0.0
+            val artistPreference = artistAffinity[aKey]?.div(maxArtistAffinity) ?: 0.0
             val genrePreference = genreKey?.let { (genreAffinity[it] ?: 0.0) / maxGenreAffinity } ?: 0.0
-            val favoriteArtistPreference = favoriteArtistWeights[song.artistId]?.toDouble()?.div(maxFavoriteArtist) ?: 0.0
+            val favoriteArtistPreference = favoriteArtistWeights[aKey]?.toDouble()?.div(maxFavoriteArtist) ?: 0.0
             val preferenceScore = if (genreKey == null) {
                 (artistPreference * 0.6) + (favoriteArtistPreference * 0.4)
             } else {
@@ -510,6 +511,11 @@ class DailyMixManager @Inject constructor(
         return orderedResult.take(limit.coerceAtMost(orderedResult.size))
     }
 
+    private fun artistKey(song: Song): String {
+        return if (song.artistId != 0L) "id_${song.artistId}"
+        else "name_${song.artist.trim().lowercase()}"
+    }
+
     private fun pickWithDiversity(
         rankedSongs: List<RankedSong>,
         favoriteSongIds: Set<String>,
@@ -522,10 +528,10 @@ class DailyMixManager @Inject constructor(
 
         for (candidate in rankedSongs) {
             if (selected.size >= limit) break
-            val artistId = candidate.song.artistId
+            val aKey = artistKey(candidate.song)
             val isFavorite = favoriteSongIds.contains(candidate.song.id)
             val maxPerArtist = if (isFavorite) 3 else 2
-            val currentCount = state.artistCounts.getOrDefault(artistId, 0)
+            val currentCount = state.artistCounts.getOrDefault(aKey, 0)
             if (currentCount >= maxPerArtist) continue
 
             val genreKey = normalizeGenreKey(candidate.song.genre)
@@ -542,7 +548,7 @@ class DailyMixManager @Inject constructor(
             }
 
             selected += candidate.song
-            state.artistCounts[artistId] = currentCount + 1
+            state.artistCounts[aKey] = currentCount + 1
             if (genreKey == null) {
                 state.unknownGenreCount += 1
             } else {
@@ -629,7 +635,7 @@ class DailyMixManager @Inject constructor(
     )
 
     private data class DiversityState(
-        val artistCounts: MutableMap<Long, Int> = mutableMapOf(),
+        val artistCounts: MutableMap<String, Int> = mutableMapOf(),
         val genreCounts: MutableMap<String, Int> = mutableMapOf(),
         var unknownGenreCount: Int = 0
     )

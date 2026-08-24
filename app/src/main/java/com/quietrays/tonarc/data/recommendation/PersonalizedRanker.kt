@@ -51,10 +51,15 @@ class PersonalizedRanker @Inject constructor() {
     }
 
     data class DiversityState(
-        val artistCounts: MutableMap<Long, Int> = mutableMapOf(),
+        val artistCounts: MutableMap<String, Int> = mutableMapOf(),
         val genreCounts: MutableMap<String, Int> = mutableMapOf(),
         var unknownGenreCount: Int = 0
     )
+
+    private fun artistKey(song: Song): String {
+        return if (song.artistId != 0L) "id_${song.artistId}"
+        else "name_${song.artist.trim().lowercase()}"
+    }
 
     fun rank(
         candidates: List<RecommendationCandidate>,
@@ -144,11 +149,12 @@ class PersonalizedRanker @Inject constructor() {
             val song = scored.song
             val isFavorite = favoriteSongIds.contains(song.id)
             val maxPerArtist = if (isFavorite) 3 else 2
-            val artistCount = state.artistCounts.getOrDefault(song.artistId, 0)
+            val key = artistKey(song)
+            val artistCount = state.artistCounts.getOrDefault(key, 0)
             if (artistCount >= maxPerArtist) continue
 
             selected += song
-            state.artistCounts[song.artistId] = artistCount + 1
+            state.artistCounts[key] = artistCount + 1
         }
 
         if (selected.size < limit) {

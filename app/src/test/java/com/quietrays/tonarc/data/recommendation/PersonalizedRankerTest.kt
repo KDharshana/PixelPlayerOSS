@@ -155,4 +155,32 @@ class PersonalizedRankerTest {
         val diversePicks = ranker.pickWithDiversity(candidates, emptySet(), limit = 2)
         assertThat(diversePicks).hasSize(2)
     }
+
+    @Test
+    fun `pickWithDiversity distinguishes different artists even when artistId is 0L`() {
+        val artists = listOf("Queen", "Daft Punk", "The Beatles", "Taylor Swift", "Radiohead")
+        val candidates = artists.mapIndexed { index, artistName ->
+            val song = testSong(
+                id = "youtube_$index",
+                title = "Hit Track $index",
+                artist = artistName,
+                artistId = 0L
+            )
+            PersonalizedRanker.ScoredCandidate(
+                candidate = RecommendationCandidate(song, CandidateSourceType.YT_RADIO),
+                finalScore = 0.9 - (index * 0.05),
+                affinityScore = 0.8,
+                recencyScore = 0.8,
+                noveltyScore = 0.8,
+                favoriteScore = 0.0,
+                sourceStrengthScore = 0.9
+            )
+        }
+
+        val diversePicks = ranker.pickWithDiversity(candidates, emptySet(), limit = 5)
+        assertThat(diversePicks).hasSize(5)
+        assertThat(diversePicks.map { it.artist }).containsExactly(
+            "Queen", "Daft Punk", "The Beatles", "Taylor Swift", "Radiohead"
+        ).inOrder()
+    }
 }
