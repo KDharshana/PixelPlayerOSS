@@ -63,6 +63,14 @@ class InnertubeApiService @Inject constructor(
                 android.util.Log.d("YouTubeMusic", "InnertubeApiService updated authCookies (length=${cookies?.length ?: 0}, hasSapisid=${!sapisid.isNullOrBlank()})")
             }
         }
+        scope.launch(Dispatchers.IO) {
+            userPreferencesRepository.youTubeVisitorDataFlow.collect { vData ->
+                if (!vData.isNullOrBlank() && visitorData == null) {
+                    visitorData = vData
+                    android.util.Log.d("YouTubeMusic", "Loaded cached visitorData from DataStore: ${vData.take(20)}...")
+                }
+            }
+        }
     }
 
     private fun extractCookieValue(cookies: String, name: String): String? {
@@ -71,13 +79,15 @@ class InnertubeApiService @Inject constructor(
     }
 
     private fun extractVisitorData(jsonString: String) {
-        if (visitorData != null) return
         try {
             val json = JSONObject(jsonString)
             val vData = json.optJSONObject("responseContext")?.optString("visitorData")
-            if (!vData.isNullOrBlank()) {
+            if (!vData.isNullOrBlank() && vData != visitorData) {
                 visitorData = vData
                 android.util.Log.d("YouTubeMusic", "Captured visitorData from response: ${vData.take(20)}...")
+                scope.launch(Dispatchers.IO) {
+                    userPreferencesRepository.setYouTubeVisitorData(vData)
+                }
             }
         } catch (_: Exception) {}
     }
@@ -256,6 +266,7 @@ class InnertubeApiService @Inject constructor(
             val response = okHttpClient.newCall(request).execute()
             val responseBody = response.body?.string()
             if (responseBody != null) {
+                extractVisitorData(responseBody)
                 val info = InnertubeParser.parsePlayerResponse(responseBody)
                 if (info?.selectedFormatUrl != null) {
                     android.util.Log.d("YouTubeMusic", "Android client resolved formatUrl for $videoId")

@@ -206,6 +206,7 @@ constructor(
         val AUTO_SCAN_LRC_FILES = booleanPreferencesKey("auto_scan_lrc_files")
         val EXTERNAL_LYRICS_ENABLED = booleanPreferencesKey("external_lyrics_enabled")
         val YOUTUBE_AUTH_COOKIES = stringPreferencesKey("youtube_auth_cookies")
+        val YOUTUBE_VISITOR_DATA = stringPreferencesKey("youtube_visitor_data")
         val EXTERNAL_ARTIST_IMAGES_ENABLED = booleanPreferencesKey("external_artist_images_enabled")
 
         val ALBUM_ART_QUALITY = stringPreferencesKey("album_art_quality")
@@ -1609,6 +1610,21 @@ constructor(
                 preferences.remove(PreferencesKeys.YOUTUBE_AUTH_COOKIES)
             } else {
                 preferences[PreferencesKeys.YOUTUBE_AUTH_COOKIES] = cookies
+            }
+        }
+    }
+
+    val youTubeVisitorDataFlow: Flow<String?> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.YOUTUBE_VISITOR_DATA]
+        }
+
+    suspend fun setYouTubeVisitorData(visitorData: String?) {
+        dataStore.edit { preferences ->
+            if (visitorData.isNullOrBlank()) {
+                preferences.remove(PreferencesKeys.YOUTUBE_VISITOR_DATA)
+            } else {
+                preferences[PreferencesKeys.YOUTUBE_VISITOR_DATA] = visitorData
             }
         }
     }
