@@ -34,6 +34,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import java.io.File
 import com.quietrays.tonarc.data.youtube.YouTubeRepository
+import com.quietrays.tonarc.data.network.deezer.DeezerApiService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 data class SetupArtistItem(
     val name: String,
@@ -120,6 +124,7 @@ class SetupViewModel @Inject constructor(
     private val backupManager: BackupManager,
     private val musicRepository: MusicRepository,
     private val youTubeRepository: YouTubeRepository,
+    private val deezerApiService: DeezerApiService,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -128,9 +133,6 @@ class SetupViewModel @Inject constructor(
     private val _events = Channel<SetupEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
     
-    /**
-     * Expose sync progress for UI to show during initial setup
-     */
     /**
      * Expose sync progress for UI to show during initial setup
      */
@@ -149,8 +151,11 @@ class SetupViewModel @Inject constructor(
     val isCurrentDirectoryResolved = fileExplorerStateHolder.isCurrentDirectoryResolved
     private var hasPendingDirectoryRuleChanges = false
     private var latestDirectoryRuleUpdateJob: Job? = null
+    private var loadPopularArtistsJob: Job? = null
 
     init {
+        loadPopularArtists()
+
         viewModelScope.launch {
             if (!userPreferencesRepository.initialSetupDoneFlow.first()) {
                 themePreferencesRepository.initializeAppThemeMode(AppThemeMode.DARK)
@@ -467,6 +472,102 @@ class SetupViewModel @Inject constructor(
 
     private var artistSearchJob: Job? = null
 
+    private fun isIgnoredArtist(name: String): Boolean {
+        val lower = name.lowercase().trim()
+        return lower.isBlank() ||
+                lower == "unknown" ||
+                lower == "unknown artist" ||
+                lower == "<unknown>" ||
+                lower == "various artists" ||
+                lower == "various" ||
+                lower == "soundtrack" ||
+                lower == "va"
+    }
+
+    fun loadPopularArtists() {
+        loadPopularArtistsJob?.cancel()
+        loadPopularArtistsJob = viewModelScope.launch {
+            val collectedArtists = mutableListOf<SetupArtistItem>()
+            val seenNames = mutableSetOf<String>()
+            var itemIndex = 0
+
+            fun addArtist(name: String, id: String? = null, imageUrl: String? = null, priority: Boolean = false) {
+                val trimmed = name.trim()
+                val normalized = trimmed.lowercase()
+                if (trimmed.isNotBlank() && !isIgnoredArtist(normalized) && seenNames.add(normalized)) {
+                    val safeId = id ?: "artist_${normalized.replace(Regex("[^a-z0-9_]"), "_")}_${itemIndex++}"
+                    val item = SetupArtistItem(
+                        id = safeId,
+                        name = trimmed,
+                        imageUrl = imageUrl
+                    )
+                    if (priority) {
+                        collectedArtists.add(0, item)
+                    } else {
+                        collectedArtists.add(item)
+                    }
+                }
+            }
+
+            // 1. Scan local library for top artists if available
+            runCatching {
+                val localSongs = musicRepository.getAudioFiles().first()
+                if (localSongs.isNotEmpty()) {
+                    val topLocalArtists = localSongs
+                        .map { it.artist.trim() }
+                        .filter { it.isNotBlank() && !isIgnoredArtist(it) }
+                        .groupingBy { it }
+                        .eachCount()
+                        .entries
+                        .sortedByDescending { it.value }
+                        .take(15)
+                        .map { it.key }
+
+                    topLocalArtists.forEach { artistName ->
+                        addArtist(name = artistName, priority = true)
+                    }
+                }
+            }
+
+            // 2. Query YouTube Music Charts / Trending for popular artists
+            runCatching {
+                val chartSongs = youTubeRepository.getCharts().first()
+                chartSongs.forEach { song ->
+                    if (song.artist.isNotBlank()) {
+                        addArtist(name = song.artist, imageUrl = null)
+                    }
+                }
+            }
+
+            // 3. Add default curated artists to ensure a rich diverse catalog
+            DEFAULT_POPULAR_ARTISTS.forEach { defaultArtist ->
+                addArtist(
+                    name = defaultArtist.name,
+                    id = defaultArtist.id,
+                    imageUrl = defaultArtist.imageUrl
+                )
+            }
+
+            val baseList = collectedArtists.take(48)
+            _uiState.update { it.copy(popularArtists = baseList) }
+
+            // 4. Concurrently resolve high-resolution artist images using Deezer API
+            val enrichedList = baseList.map { artist ->
+                async {
+                    if (artist.imageUrl != null) return@async artist
+                    val pictureUrl = runCatching {
+                        deezerApiService.searchArtist(artist.name, limit = 1).data.firstOrNull()?.let {
+                            it.pictureMedium ?: it.pictureBig ?: it.picture
+                        }
+                    }.getOrNull()
+                    artist.copy(imageUrl = pictureUrl)
+                }
+            }.awaitAll()
+
+            _uiState.update { it.copy(popularArtists = enrichedList) }
+        }
+    }
+
     fun toggleFavoriteArtist(artistName: String) {
         _uiState.update { state ->
             val current = state.selectedFavoriteArtists
@@ -506,7 +607,21 @@ class SetupViewModel @Inject constructor(
                     } else null
                 } else null
             }?.distinctBy { it.name.lowercase().trim() } ?: emptyList()
-            _uiState.update { it.copy(artistSearchResults = artistItems, isSearchingArtists = false) }
+
+            // Resolve images via Deezer if YouTube result lacked artwork
+            val enrichedResults = artistItems.map { artist ->
+                async {
+                    if (artist.imageUrl != null) return@async artist
+                    val pictureUrl = runCatching {
+                        deezerApiService.searchArtist(artist.name, limit = 1).data.firstOrNull()?.let {
+                            it.pictureMedium ?: it.pictureBig ?: it.picture
+                        }
+                    }.getOrNull()
+                    artist.copy(imageUrl = pictureUrl)
+                }
+            }.awaitAll()
+
+            _uiState.update { it.copy(artistSearchResults = enrichedResults, isSearchingArtists = false) }
         }
     }
 

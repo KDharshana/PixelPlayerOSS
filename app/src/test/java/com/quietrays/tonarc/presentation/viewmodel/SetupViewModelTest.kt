@@ -33,6 +33,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 
+import com.quietrays.tonarc.data.network.deezer.DeezerApiService
+import com.quietrays.tonarc.data.network.deezer.DeezerSearchResponse
+import com.quietrays.tonarc.data.network.deezer.DeezerArtist
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class SetupViewModelTest {
 
@@ -43,6 +47,7 @@ class SetupViewModelTest {
     private lateinit var backupManager: BackupManager
     private lateinit var musicRepository: MusicRepository
     private lateinit var youTubeRepository: YouTubeRepository
+    private lateinit var deezerApiService: DeezerApiService
     private lateinit var context: Context
     private lateinit var tempDir: java.nio.file.Path
 
@@ -66,6 +71,9 @@ class SetupViewModelTest {
         backupManager = mockk(relaxed = true)
         musicRepository = mockk(relaxed = true)
         youTubeRepository = mockk(relaxed = true)
+        deezerApiService = mockk(relaxed = true) {
+            coEvery { searchArtist(any(), any()) } returns DeezerSearchResponse(emptyList(), 0)
+        }
         val storageManager = mockk<android.os.storage.StorageManager>(relaxed = true) {
             every { storageVolumes } returns emptyList()
         }
@@ -90,6 +98,7 @@ class SetupViewModelTest {
             backupManager = backupManager,
             musicRepository = musicRepository,
             youTubeRepository = youTubeRepository,
+            deezerApiService = deezerApiService,
             context = context
         )
     }
@@ -194,5 +203,24 @@ class SetupViewModelTest {
         assertEquals(2, results.size)
         assertEquals("IMA", results[0].name)
         assertEquals("Imagine Dragons", results[1].name)
+    }
+
+    @Test
+    fun `loadPopularArtists enriches artists with Deezer images and local artists`() = runTest(testDispatcher) {
+        coEvery { deezerApiService.searchArtist("Taylor Swift", 1) } returns DeezerSearchResponse(
+            data = listOf(
+                DeezerArtist(id = 1L, name = "Taylor Swift", pictureMedium = "https://img.deezer.com/ts_med.jpg")
+            ),
+            total = 1
+        )
+
+        val viewModel = createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val artists = viewModel.uiState.value.popularArtists
+        assertTrue(artists.isNotEmpty())
+        val taylor = artists.firstOrNull { it.name == "Taylor Swift" }
+        assertTrue(taylor != null)
+        assertEquals("https://img.deezer.com/ts_med.jpg", taylor?.imageUrl)
     }
 }
