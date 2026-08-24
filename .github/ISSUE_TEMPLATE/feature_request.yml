@@ -1,12 +1,12 @@
 name: Feature Request
-description: Suggest an idea for this project
+description: Suggest an idea for Tonarc
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for your interest in improving PixelPlayerOSS!
+        Thanks for your interest in improving Tonarc!
   - type: textarea
     id: problem
     attributes:

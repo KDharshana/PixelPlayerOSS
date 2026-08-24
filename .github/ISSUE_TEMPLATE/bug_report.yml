@@ -1,12 +1,12 @@
 name: Bug Report
-description: Create a report to help us improve PixelPlayerOSS
+description: Create a report to help us improve Tonarc
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
+        Thanks for taking the time to fill out this bug report for Tonarc!
   - type: textarea
     id: description
     attributes:
