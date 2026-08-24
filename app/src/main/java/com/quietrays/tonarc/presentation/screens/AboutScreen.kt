@@ -120,6 +120,16 @@ private data class Contributor(
     val contributions: Int? = null,
 )
 
+private val QuietRaysMaintainer = Contributor(
+    id = "quietrays",
+    displayName = "@quietrays",
+    role = "Core Maintainer",
+    detail = "Developer and core maintainer of Tonarc.",
+    avatarUrl = "https://github.com/quietrays.png",
+    iconRes = R.drawable.round_developer_board_24,
+    githubUrl = "https://github.com/quietrays",
+)
+
 private val CoreMaintainer = Contributor(
     id = "lostf1sh",
     displayName = "@lostf1sh",
@@ -134,8 +144,8 @@ private val CoreMaintainer = Contributor(
 private val NonFossMaintainer = Contributor(
     id = "theovilardo",
     displayName = "@theovilardo",
-    role = "Author / Non-FOSS Maintainer",
-    detail = "Author and maintainer of the original Google Play / non-FOSS PixelPlayer release.",
+    role = "Author / Original Maintainer",
+    detail = "Author and maintainer of the original PixelPlayer release.",
     badge = "Original app",
     avatarUrl = "https://github.com/theovilardo.png",
     iconRes = R.drawable.round_developer_board_24,
@@ -143,13 +153,14 @@ private val NonFossMaintainer = Contributor(
 )
 
 private val AboutMaintainers = listOf(
+    QuietRaysMaintainer,
     CoreMaintainer,
     NonFossMaintainer,
 )
 
-private const val SourceRepoUrl = "https://github.com/lostf1sh/PixelPlayerOSS"
-private const val FDroidUrl = "https://f-droid.org/packages/com.quietrays.tonarc/"
-private const val SponsorUrl = "https://github.com/sponsors/lostf1sh"
+private const val SourceRepoUrl = ""
+private const val FDroidUrl = ""
+private const val SponsorUrl = ""
 
 private data class ProjectLink(
     val id: String,
@@ -657,16 +668,23 @@ private fun AboutLinkCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isClickable = link.url.isNotBlank()
+    val clickableModifier = if (isClickable) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = LocalIndication.current,
+            role = Role.Button,
+            onClickLabel = stringResource(R.string.cd_about_open_link, link.title),
+            onClick = onClick,
+        )
+    } else {
+        Modifier
+    }
+
     Surface(
         modifier = modifier
             .clip(shape)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = LocalIndication.current,
-                role = Role.Button,
-                onClickLabel = stringResource(R.string.cd_about_open_link, link.title),
-                onClick = onClick,
-            ),
+            .then(clickableModifier),
         shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 2.dp,
@@ -715,12 +733,14 @@ private fun AboutLinkCard(
                 )
             }
 
-            Icon(
-                painter = painterResource(R.drawable.rounded_chevron_right_24),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp),
-            )
+            if (isClickable) {
+                Icon(
+                    painter = painterResource(R.drawable.rounded_chevron_right_24),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         }
     }
 }
@@ -983,6 +1003,7 @@ private fun expressiveListShape(index: Int, count: Int): AbsoluteSmoothCornerSha
 }
 
 private fun openUrl(context: Context, url: String) {
+    if (url.isBlank()) return
     val uri = try {
         url.toUri()
     } catch (_: Throwable) {
