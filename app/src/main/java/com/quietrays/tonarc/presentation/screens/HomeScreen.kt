@@ -560,6 +560,12 @@ fun HomeScreen(
                             songs = section.songs,
                             currentPlayingSongId = currentSong?.id,
                             isPlaying = isPlaying,
+                            seeAllText = "View More",
+                            onSeeAllClick = {
+                                playerViewModel.updateSearchQuery(section.artistName)
+                                playerViewModel.onSearchQuerySubmitted(section.artistName)
+                                navController.navigateSafely(Screen.Search.route)
+                            },
                             onSongClick = { song ->
                                 playerViewModel.showAndPlaySong(
                                     song,

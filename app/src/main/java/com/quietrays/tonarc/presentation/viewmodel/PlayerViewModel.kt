@@ -1319,9 +1319,12 @@ class PlayerViewModel @Inject constructor(
         .map { it.toImmutableList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), persistentListOf())
 
+    private var homeRecommendationsJob: Job? = null
+
     fun loadHomeRecommendations(forceRefresh: Boolean = false) {
-        if (!forceRefresh && _fromCommunitySongs.value.isNotEmpty() && _favoriteArtistSections.value.isNotEmpty()) return
-        viewModelScope.launch {
+        if (homeRecommendationsJob?.isActive == true) return
+        if (!forceRefresh && (_fromCommunitySongs.value.isNotEmpty() || _favoriteArtistSections.value.isNotEmpty())) return
+        homeRecommendationsJob = viewModelScope.launch {
             // 1. YouTube browse recommendations (Explore / Home)
             launch {
                 try {
@@ -1349,16 +1352,16 @@ class PlayerViewModel @Inject constructor(
                 }
             }
 
-            // 2. Favorite artist individual top songs sections
+            // 2. Favorite artist individual top songs sections (up to 20 songs per artist)
             launch {
                 try {
                     val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
-                    if (favArtists.isNotEmpty()) {
+                    if (favArtists.isNotEmpty() && (forceRefresh || _favoriteArtistSections.value.isEmpty())) {
                         val sections = kotlinx.coroutines.coroutineScope {
                             favArtists.take(8).map { artistName ->
                                 async {
                                     val songs = runCatching {
-                                        youTubeRepository.searchSongsPaginated(artistName).songs.take(6)
+                                        youTubeRepository.searchSongsPaginated(artistName).songs.take(20)
                                     }.getOrDefault(emptyList())
                                     if (songs.isNotEmpty()) {
                                         val firstArtwork = songs.firstOrNull()?.albumArtUriString

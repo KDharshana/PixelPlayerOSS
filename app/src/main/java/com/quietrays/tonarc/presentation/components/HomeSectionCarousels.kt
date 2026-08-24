@@ -30,6 +30,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ fun HomeSectionHeader(
     title: String,
     subtitle: String? = null,
     modifier: Modifier = Modifier,
+    seeAllText: String = "View More",
     onSeeAllClick: (() -> Unit)? = null
 ) {
     Row(
@@ -82,6 +84,19 @@ fun HomeSectionHeader(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        if (onSeeAllClick != null) {
+            TextButton(
+                onClick = onSeeAllClick,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = seeAllText,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -259,6 +274,8 @@ fun HorizontalSongCarouselSection(
     currentPlayingSongId: String?,
     isPlaying: Boolean,
     onSongClick: (Song) -> Unit,
+    seeAllText: String = "View More",
+    onSeeAllClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (songs.isEmpty()) return
@@ -268,7 +285,9 @@ fun HorizontalSongCarouselSection(
     Column(modifier = modifier.fillMaxWidth()) {
         HomeSectionHeader(
             title = title,
-            subtitle = subtitle
+            subtitle = subtitle,
+            seeAllText = seeAllText,
+            onSeeAllClick = onSeeAllClick
         )
 
         Spacer(modifier = Modifier.height(12.dp))
