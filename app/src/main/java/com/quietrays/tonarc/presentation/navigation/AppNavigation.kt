@@ -40,6 +40,7 @@ import com.quietrays.tonarc.presentation.screens.AudioBookmarksScreen
 import com.quietrays.tonarc.presentation.screens.CloudDownloadsScreen
 import com.quietrays.tonarc.presentation.screens.AccountsScreen
 import com.quietrays.tonarc.presentation.screens.ArtistDetailScreen
+import com.quietrays.tonarc.presentation.screens.FavoriteArtistSongsScreen
 import com.quietrays.tonarc.presentation.screens.ArtistSettingsScreen
 import com.quietrays.tonarc.presentation.screens.DailyMixScreen
 import com.quietrays.tonarc.presentation.screens.EditTransitionScreen
@@ -445,6 +446,26 @@ fun AppNavigation(
                     ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
                         ArtistDetailScreen(
                             artistId = artistId,
+                            navController = navController,
+                            playerViewModel = playerViewModel
+                        )
+                    }
+                }
+            }
+            composable(
+                route = Screen.FavoriteArtistSongs.route,
+                arguments = listOf(navArgument("artistName") { type = NavType.StringType }),
+                enterTransition = { enterTransition() },
+                exitTransition = { exitTransition() },
+                popEnterTransition = { popEnterTransition() },
+                popExitTransition = { popExitTransition() },
+            ) { backStackEntry ->
+                val artistName = backStackEntry.arguments?.getString("artistName")
+                if (artistName != null) {
+                    val decodedArtistName = java.net.URLDecoder.decode(artistName, "UTF-8")
+                    ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
+                        FavoriteArtistSongsScreen(
+                            artistName = decodedArtistName,
                             navController = navController,
                             playerViewModel = playerViewModel
                         )

@@ -581,9 +581,7 @@ fun HomeScreen(
                             artists = favoriteArtists.toList(),
                             artistImages = artistImages,
                             onArtistClick = { artistName ->
-                                playerViewModel.updateSearchQuery(artistName)
-                                playerViewModel.onSearchQuerySubmitted(artistName)
-                                navController.navigateSafely(Screen.Search.route)
+                                navController.navigateSafely(Screen.FavoriteArtistSongs.createRoute(artistName))
                             }
                         )
                     }
@@ -603,9 +601,7 @@ fun HomeScreen(
                             isPlaying = isPlaying,
                             seeAllText = "View More",
                             onSeeAllClick = {
-                                playerViewModel.updateSearchQuery(section.artistName)
-                                playerViewModel.onSearchQuerySubmitted(section.artistName)
-                                navController.navigateSafely(Screen.Search.route)
+                                navController.navigateSafely(Screen.FavoriteArtistSongs.createRoute(section.artistName))
                             },
                             onSongClick = { song ->
                                 playerViewModel.showAndPlaySong(
@@ -627,6 +623,15 @@ fun HomeScreen(
                             songs = favoriteArtistsSongs,
                             currentPlayingSongId = currentSong?.id,
                             isPlaying = isPlaying,
+                            seeAllText = "View More",
+                            onSeeAllClick = if (favoriteArtists.isNotEmpty()) {
+                                {
+                                    val firstArtist = favoriteArtists.firstOrNull() ?: ""
+                                    if (firstArtist.isNotBlank()) {
+                                        navController.navigateSafely(Screen.FavoriteArtistSongs.createRoute(firstArtist))
+                                    }
+                                }
+                            } else null,
                             onSongClick = { song ->
                                 playerViewModel.showAndPlaySong(song, favoriteArtistsSongs, "Favorite Artists Mix")
                             }

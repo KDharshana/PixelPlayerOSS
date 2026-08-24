@@ -53,6 +53,10 @@ sealed class Screen(val route: String) {
         fun createRoute(artistId: Long) = "artist_detail/$artistId"
     }
 
+    object FavoriteArtistSongs : Screen("favorite_artist_songs/{artistName}") {
+        fun createRoute(artistName: String) = "favorite_artist_songs/${Uri.encode(artistName)}"
+    }
+
     object EditTransition : Screen("edit_transition?playlistId={playlistId}") {
         fun createRoute(playlistId: String?) =
             if (playlistId != null) "edit_transition?playlistId=$playlistId" else "edit_transition"
