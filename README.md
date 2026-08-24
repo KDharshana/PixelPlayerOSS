@@ -272,6 +272,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 Third-party dependencies and licensing notices are detailed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 <p align="center">
-  Maintained by <a href="https://github.com/dharshan-X">dharshan-X</a>
+  Maintained by <a href="https://github.com/dharshan-X">quietrays</a>
 </p>
 
