@@ -133,6 +133,7 @@ import androidx.compose.ui.res.stringResource
 private data class SearchUiSlice(
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
     val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val searchHistory: ImmutableList<SearchHistoryItem> = persistentListOf(),
     val isLoadingMoreSearchResults: Boolean = false,
     val isSearchingOnline: Boolean = false
 )
@@ -160,6 +161,7 @@ fun SearchScreen(
                 SearchUiSlice(
                     selectedSearchFilter = uiState.selectedSearchFilter,
                     searchResults = uiState.searchResults,
+                    searchHistory = uiState.searchHistory,
                     isLoadingMoreSearchResults = uiState.isLoadingMoreSearchResults,
                     isSearchingOnline = uiState.isSearchingOnline
                 )
@@ -363,11 +365,23 @@ fun SearchScreen(
                 if (isGenreMode) {
                     GenreCategoriesGrid(
                         genres = genres,
+                        searchHistory = searchUiState.searchHistory,
                         onGenreClick = { genre ->
                             Timber.tag("SearchScreen")
                                 .d("Genre clicked: ${genre.name} (ID: ${genre.id})")
                             val encodedGenreId = java.net.URLEncoder.encode(genre.id, "UTF-8")
                             navController.navigateSafely(Screen.GenreDetail.createRoute(encodedGenreId))
+                        },
+                        onHistoryClick = { query ->
+                            searchQuery = query
+                            playerViewModel.updateSearchQuery(query)
+                            playerViewModel.onSearchQuerySubmitted(query)
+                        },
+                        onHistoryDelete = { query ->
+                            playerViewModel.deleteSearchHistoryItem(query)
+                        },
+                        onClearAllHistory = {
+                            playerViewModel.clearSearchHistory()
                         },
                         playerViewModel = playerViewModel,
                         modifier = Modifier.padding(top = 12.dp)
@@ -553,90 +567,6 @@ fun SearchResultSectionHeader(title: String) {
     )
 }
 
-@Composable
-fun SearchHistoryList(
-    historyItems: ImmutableList<SearchHistoryItem>,
-    onHistoryClick: (String) -> Unit,
-    onHistoryDelete: (String) -> Unit,
-    onClearAllHistory: () -> Unit
-) {
-    val localDensity = LocalDensity.current
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                stringResource(R.string.recent_searches),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            if (historyItems.isNotEmpty()) {
-                TextButton(onClick = onClearAllHistory) {
-                    Text(stringResource(R.string.clear_all), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(
-                top = 8.dp,
-            )
-        ) {
-            items(historyItems, key = { "history_${it.id ?: it.query}" }, contentType = { "search_history" }) { item ->
-                SearchHistoryListItem(
-                    item = item,
-                    onHistoryClick = onHistoryClick,
-                    onHistoryDelete = onHistoryDelete
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun SearchHistoryListItem(
-    item: SearchHistoryItem,
-    onHistoryClick: (String) -> Unit,
-    onHistoryDelete: (String) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures(onTap = { onHistoryClick(item.query) }) }
-            .padding(horizontal = 8.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Icon(
-                imageVector = Icons.Rounded.History,
-                contentDescription = stringResource(R.string.cd_search_history_icon),
-                modifier = Modifier.size(20.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(
-                text = item.query,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        IconButton(onClick = { onHistoryDelete(item.query) }) {
-            Icon(
-                imageVector = Icons.Rounded.DeleteForever,
-                contentDescription = stringResource(R.string.cd_delete_search_history_item),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-            )
-        }
-    }
-}
-
 
 @Composable
 fun EmptySearchResults(searchQuery: String, colorScheme: ColorScheme) {
@@ -802,10 +732,7 @@ fun SearchResultsList(
                             playerViewModel, onItemSelected
                         ) {
                             {
-                                navController.navigateSafelyReplacing(
-                                    route = Screen.AlbumDetail.createRoute(item.album.id),
-                                    patternToPop = Screen.AlbumDetail.route
-                                )
+                                navController.navigateSafely(Screen.AlbumDetail.createRoute(item.album.id))
                                 onItemSelected()
                             }
                         }
@@ -830,10 +757,7 @@ fun SearchResultsList(
                             playerViewModel, onItemSelected
                         ) {
                             {
-                                navController.navigateSafelyReplacing(
-                                    route = Screen.ArtistDetail.createRoute(item.artist.id),
-                                    patternToPop = Screen.ArtistDetail.route
-                                )
+                                navController.navigateSafely(Screen.ArtistDetail.createRoute(item.artist.id))
                                 onItemSelected()
                             }
                         }

@@ -52,6 +52,21 @@ import com.quietrays.tonarc.presentation.viewmodel.PlayerViewModel
 import com.quietrays.tonarc.ui.theme.LocalTonarcDarkTheme
 import androidx.compose.ui.res.stringResource
 import com.quietrays.tonarc.R
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import com.quietrays.tonarc.data.model.SearchHistoryItem
+import kotlinx.collections.immutable.persistentListOf
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import kotlinx.collections.immutable.ImmutableList
 
@@ -59,11 +74,15 @@ import kotlinx.collections.immutable.ImmutableList
 @Composable
 fun GenreCategoriesGrid(
     genres: ImmutableList<Genre>,
+    searchHistory: ImmutableList<SearchHistoryItem> = persistentListOf(),
     onGenreClick: (Genre) -> Unit,
+    onHistoryClick: (String) -> Unit = {},
+    onHistoryDelete: (String) -> Unit = {},
+    onClearAllHistory: () -> Unit = {},
     playerViewModel: PlayerViewModel,
     modifier: Modifier = Modifier
 ) {
-    if (genres.isEmpty()) {
+    if (genres.isEmpty() && searchHistory.isEmpty()) {
         Box(
             modifier = modifier.fillMaxSize().padding(16.dp),
             contentAlignment = Alignment.Center
@@ -104,6 +123,82 @@ fun GenreCategoriesGrid(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (searchHistory.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }, key = "search_history_section") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 6.dp, top = 6.dp, bottom = 4.dp, end = 0.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Rounded.History,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.recent_searches),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        TextButton(onClick = onClearAllHistory) {
+                            Text(
+                                text = stringResource(R.string.clear_all),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)
+                    ) {
+                        items(searchHistory, key = { "history_${it.id ?: it.query}" }) { item ->
+                            InputChip(
+                                selected = false,
+                                onClick = { onHistoryClick(item.query) },
+                                label = {
+                                    Text(
+                                        text = item.query,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                trailingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Close,
+                                        contentDescription = stringResource(R.string.cd_delete_search_history_item),
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clickable { onHistoryDelete(item.query) },
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = InputChipDefaults.inputChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    labelColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                border = null
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         item(span = { GridItemSpan(maxLineSpan) }) {
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
