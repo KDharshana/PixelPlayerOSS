@@ -79,6 +79,20 @@ fun FavoriteArtistSongsScreen(
         uiState.songs.sumOf { it.duration }
     }
 
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val layoutInfo = gridState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            totalItems > 0 && lastVisibleItem >= totalItems - 6 && !uiState.isLoadingMore && uiState.hasMore
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) {
+            viewModel.loadMore()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -219,6 +233,23 @@ fun FavoriteArtistSongsScreen(
                                     showSongOptionsSheet = song
                                 }
                             )
+                        }
+
+                        // Loading more footer
+                        if (uiState.isLoadingMore) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 2.5.dp
+                                    )
+                                }
+                            }
                         }
                     }
                 }

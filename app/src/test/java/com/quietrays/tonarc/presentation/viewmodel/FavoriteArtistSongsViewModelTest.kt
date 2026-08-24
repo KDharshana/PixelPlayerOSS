@@ -123,4 +123,60 @@ class FavoriteArtistSongsViewModelTest {
 
         coVerify { mockUserPreferencesRepository.toggleFavoriteArtist(artistName) }
     }
+
+    @Test
+    fun `loads multiple pages and loadMore appends additional songs`() = runTest {
+        val artistName = "Coldplay"
+        val savedStateHandle = SavedStateHandle(mapOf("artistName" to artistName))
+
+        val song1 = createDummySong("yt_1", "Song 1", "Coldplay")
+        val song2 = createDummySong("yt_2", "Song 2", "Coldplay")
+        val song3 = createDummySong("yt_3", "Song 3", "Coldplay")
+
+        every { mockUserPreferencesRepository.favoriteArtistsFlow } returns flowOf(emptySet())
+        every { mockMusicRepository.getAudioFiles() } returns flowOf(emptyList())
+
+        // Initial 2 pages loaded automatically
+        coEvery { mockYouTubeRepository.searchSongsPaginated(artistName, continuation = null) } returns YouTubeRepository.YouTubePageResult(
+            songs = listOf(song1),
+            continuationToken = "token_page_2"
+        )
+        coEvery { mockYouTubeRepository.searchSongsPaginated(artistName, continuation = "token_page_2") } returns YouTubeRepository.YouTubePageResult(
+            songs = listOf(song2),
+            continuationToken = "token_page_3"
+        )
+        coEvery { mockYouTubeRepository.searchSongsPaginated(artistName, continuation = "token_page_3") } returns YouTubeRepository.YouTubePageResult(
+            songs = emptyList(),
+            continuationToken = "token_page_3"
+        )
+        coEvery { mockYouTubeRepository.searchSongsPaginated("$artistName songs") } returns YouTubeRepository.YouTubePageResult(
+            songs = emptyList(),
+            continuationToken = null
+        )
+
+        val viewModel = FavoriteArtistSongsViewModel(
+            musicRepository = mockMusicRepository,
+            youTubeRepository = mockYouTubeRepository,
+            artistImageRepository = mockArtistImageRepository,
+            userPreferencesRepository = mockUserPreferencesRepository,
+            savedStateHandle = savedStateHandle
+        )
+
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.songs.size)
+        assertTrue(viewModel.uiState.value.hasMore)
+
+        // Now test loadMore
+        coEvery { mockYouTubeRepository.searchSongsPaginated(artistName, continuation = "token_page_3") } returns YouTubeRepository.YouTubePageResult(
+            songs = listOf(song3),
+            continuationToken = null
+        )
+
+        viewModel.loadMore()
+        advanceUntilIdle()
+
+        assertEquals(3, viewModel.uiState.value.songs.size)
+        assertFalse(viewModel.uiState.value.hasMore)
+    }
 }
