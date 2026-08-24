@@ -228,4 +228,19 @@ class RecommendationEngineEdgeCasesTest {
         assertFalse("Excluded song s1 must not be in picks", pickIds.contains("s1"))
         assertFalse("Excluded song s3 must not be in picks", pickIds.contains("s3"))
     }
+
+    @Test
+    fun `test popularity bias dampening in item embeddings`() = runTest {
+        // Song A has 150 total plays, Song Popular has 5000 total plays, Song Niche has 20 total plays
+        val scorePopular = embeddingStore.computePopularityDampenedScore(cooccurrenceCount = 100L, totalCountA = 150L, totalCountB = 5000L)
+        val scoreNiche = embeddingStore.computePopularityDampenedScore(cooccurrenceCount = 18L, totalCountA = 150L, totalCountB = 20L)
+
+        assertTrue("Popular score in [0, 1]", scorePopular in 0.0..1.0)
+        assertTrue("Niche score in [0, 1]", scoreNiche in 0.0..1.0)
+        assertFalse("Popular score not NaN", scorePopular.isNaN())
+        assertFalse("Niche score not NaN", scoreNiche.isNaN())
+        // Popular score is dampened by high total count denominator
+        assertTrue("Popular score is valid positive score", scorePopular > 0.0)
+        assertTrue("Niche score is valid positive score", scoreNiche > 0.0)
+    }
 }

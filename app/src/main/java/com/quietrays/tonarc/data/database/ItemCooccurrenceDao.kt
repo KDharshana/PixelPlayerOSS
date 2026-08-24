@@ -14,6 +14,19 @@ interface ItemCooccurrenceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(cooccurrence: ItemCooccurrenceEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(cooccurrences: List<ItemCooccurrenceEntity>)
+
+    @androidx.room.Transaction
+    suspend fun batchIncrementCooccurrences(pairs: List<Pair<String, String>>, timestamp: Long) {
+        pairs.chunked(50).forEach { chunk ->
+            for ((a, b) in chunk) {
+                val (first, second) = if (a < b) Pair(a, b) else Pair(b, a)
+                incrementCooccurrence(first, second, timestamp)
+            }
+        }
+    }
+
     @Query("""
         INSERT INTO item_cooccurrences (song_id_a, song_id_b, cooccurrence_count, last_updated_timestamp)
         VALUES (:songA, :songB, 1, :timestamp)

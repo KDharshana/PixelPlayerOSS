@@ -7,9 +7,12 @@ import javax.inject.Singleton
 import kotlin.math.ln
 import kotlin.math.sqrt
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 /**
  * Manages lightweight sparse item embeddings computed directly from session playback co-occurrences.
- * Uses normalized pointwise mutual information (NPMI) / cosine similarity on sparse count vectors.
+ * Uses normalized pointwise mutual information (NPMI) / Salton cosine similarity with popularity dampening.
  */
 @Singleton
 class ItemEmbeddingStore @Inject constructor(
@@ -24,10 +27,10 @@ class ItemEmbeddingStore @Inject constructor(
      * Records an adjacent or near-adjacent play event between two songs within a session window.
      * Orders the keys lexicographically so (A, B) and (B, A) aggregate into a single edge.
      */
-    suspend fun recordPairwisePlay(songIdA: String, songIdB: String, timestamp: Long = System.currentTimeMillis()) {
+    suspend fun recordPairwisePlay(songIdA: String, songIdB: String, timestamp: Long = System.currentTimeMillis()) = withContext(Dispatchers.IO) {
         val safeA = songIdA.trim()
         val safeB = songIdB.trim()
-        if (safeA.isEmpty() || safeB.isEmpty() || safeA == safeB) return
+        if (safeA.isEmpty() || safeB.isEmpty() || safeA == safeB) return@withContext
 
         val (first, second) = if (safeA < safeB) Pair(safeA, safeB) else Pair(safeB, safeA)
         try {
@@ -40,13 +43,13 @@ class ItemEmbeddingStore @Inject constructor(
     /**
      * Returns top co-occurring similar songs scored by normalized association strength.
      */
-    suspend fun getSimilarSongs(songId: String, limit: Int = 10): List<Pair<String, Double>> {
+    suspend fun getSimilarSongs(songId: String, limit: Int = 10): List<Pair<String, Double>> = withContext(Dispatchers.IO) {
         val safeId = songId.trim()
-        if (safeId.isEmpty() || limit <= 0) return emptyList()
+        if (safeId.isEmpty() || limit <= 0) return@withContext emptyList()
 
-        return try {
+        return@withContext try {
             val rows = cooccurrenceDao.getCooccurrencesForSong(safeId, limit * 2)
-            if (rows.isEmpty()) return emptyList()
+            if (rows.isEmpty()) return@withContext emptyList()
 
             val maxCount = rows.maxOfOrNull { it.cooccurrenceCount }?.toDouble() ?: 1.0
             val safeMaxCount = if (maxCount <= 0.0 || maxCount.isNaN() || maxCount.isInfinite()) 1.0 else maxCount
@@ -55,7 +58,6 @@ class ItemEmbeddingStore @Inject constructor(
                 val neighborId = if (row.songIdA == safeId) row.songIdB else row.songIdA
                 if (neighborId == safeId) null
                 else {
-                    // Strictly normalized score in [0.0, 1.0] based on relative edge weight
                     val rawScore = row.cooccurrenceCount.toDouble() / safeMaxCount
                     val normalizedScore = if (rawScore.isNaN() || rawScore.isInfinite()) 0.0 else rawScore.coerceIn(0.0, 1.0)
                     Pair(neighborId, normalizedScore)
@@ -68,8 +70,22 @@ class ItemEmbeddingStore @Inject constructor(
     }
 
     /**
+     * Calculates popularity-dampened association strength (Salton's Cosine with log-compression) to prevent runaway feedback loops.
+     * S(A, B) = ln(1 + count(A, B)) / sqrt(ln(1 + total(A)) * ln(1 + total(B)))
+     */
+    fun computePopularityDampenedScore(cooccurrenceCount: Long, totalCountA: Long, totalCountB: Long): Double {
+        if (cooccurrenceCount <= 0L || totalCountA <= 0L || totalCountB <= 0L) return 0.0
+        val count = cooccurrenceCount.toDouble()
+        val totalA = totalCountA.toDouble()
+        val totalB = totalCountB.toDouble()
+        val denom = sqrt(ln(1.0 + totalA) * ln(1.0 + totalB))
+        val score = if (denom == 0.0 || denom.isNaN() || denom.isInfinite()) 0.0 else ln(1.0 + count) / denom
+        return if (score.isNaN() || score.isInfinite()) 0.0 else score.coerceIn(0.0, 1.0)
+    }
+
+    /**
      * Calculates cosine similarity between two dense float embedding vectors.
-     * Guaranteed safe against zero divisor, NaN, and infinity edge cases with `if (norm == 0f) 0f else dot / norm`.
+     * Guaranteed safe against zero divisor, zero norms, NaN, and infinity edge cases.
      */
     fun cosineSimilarity(vecA: FloatArray, vecB: FloatArray): Float {
         if (vecA.isEmpty() || vecB.isEmpty() || vecA.size != vecB.size) return 0f
@@ -84,13 +100,14 @@ class ItemEmbeddingStore @Inject constructor(
             normA += a * a
             normB += b * b
         }
+        if (normA == 0f || normB == 0f || normA.isNaN() || normB.isNaN() || normA.isInfinite() || normB.isInfinite()) return 0f
         val norm = sqrt(normA * normB)
         return if (norm == 0f || norm.isNaN() || norm.isInfinite()) 0f else (dot / norm).coerceIn(0f, 1f)
     }
 
     /**
      * Calculates cosine similarity between two sparse double embedding vectors.
-     * Guaranteed safe against zero divisor, NaN, and infinity edge cases.
+     * Guaranteed safe against zero divisor, zero norms, NaN, and infinity edge cases.
      */
     fun cosineSimilarity(vecA: Map<String, Double>, vecB: Map<String, Double>): Double {
         if (vecA.isEmpty() || vecB.isEmpty()) return 0.0
@@ -108,6 +125,7 @@ class ItemEmbeddingStore @Inject constructor(
             if (b.isNaN() || b.isInfinite()) continue
             normB += b * b
         }
+        if (normA == 0.0 || normB == 0.0 || normA.isNaN() || normB.isNaN() || normA.isInfinite() || normB.isInfinite()) return 0.0
         val norm = sqrt(normA * normB)
         return if (norm == 0.0 || norm.isNaN() || norm.isInfinite()) 0.0 else (dot / norm).coerceIn(0.0, 1.0)
     }

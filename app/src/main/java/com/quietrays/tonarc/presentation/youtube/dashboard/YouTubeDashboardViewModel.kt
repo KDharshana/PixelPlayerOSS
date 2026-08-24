@@ -113,14 +113,15 @@ class YouTubeDashboardViewModel @Inject constructor(
                                 cachedTunedWeights = adaptiveWeightTuner.computeTunedWeights(allEngagements)
 
                                 val topSongs = engagementDao.getTopPlayedSongs(10)
-                                val recentSongs = engagementDao.getRecentlyPlayedSongs(10)
-                                val seedIds = (topSongs + recentSongs).map { it.songId }.toSet()
+                                val recentSongs = engagementDao.getRecentlyPlayedSongs(20)
+                                val recentPlayedIds = recentSongs.map { it.songId }.toSet()
+                                val seedIds = (topSongs + recentSongs.take(5)).map { it.songId }.toSet()
                                 val allAudioSongs = runCatching { musicRepository.getAllSongsOnce() }.getOrDefault(emptyList())
                                 val localSeedSongs = allAudioSongs.filter { it.id in seedIds }
                                 val chartSeeds = cachedCharts.filter { it.id in seedIds }
                                 val seedSongs = (localSeedSongs + chartSeeds).distinctBy { it.id }
 
-                                cachedCandidates = candidateAggregator.collect(seedSongs, limit = 60)
+                                cachedCandidates = candidateAggregator.collect(seedSongs, limit = 60, excludedSongIds = recentPlayedIds)
                             }.onFailure {
                                 Timber.tag("YouTubeDashboardVM").e(it, "Failed to compute recommendation candidates")
                             }

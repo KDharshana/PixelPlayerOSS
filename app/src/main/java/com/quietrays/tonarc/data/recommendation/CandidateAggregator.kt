@@ -6,9 +6,11 @@ import com.quietrays.tonarc.data.playlist.nlp.GenreTaxonomy
 import com.quietrays.tonarc.data.preferences.UserPreferencesRepository
 import com.quietrays.tonarc.data.repository.MusicRepository
 import com.quietrays.tonarc.data.youtube.YouTubeRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,13 +41,13 @@ class CandidateAggregator @Inject constructor(
         seedSongs: List<Song>,
         limit: Int = 100,
         excludedSongIds: Set<String> = emptySet()
-    ): List<RecommendationCandidate> = coroutineScope {
+    ): List<RecommendationCandidate> = withContext(Dispatchers.IO) {
         val favoriteArtists = runCatching { userPreferencesRepository.favoriteArtistsFlow.first() }.getOrDefault(emptySet())
         val validSeeds = seedSongs.filterNot { it.id in excludedSongIds }
 
         // Cold Start Fallback: If no seeds and no favorite artists are present, query top genres and randomized unplayed tracks
         if (validSeeds.isEmpty() && favoriteArtists.isEmpty()) {
-            return@coroutineScope collectColdStartFallback(limit, excludedSongIds)
+            return@withContext collectColdStartFallback(limit, excludedSongIds)
         }
 
         val topSeeds = validSeeds.take(5)
@@ -78,9 +80,10 @@ class CandidateAggregator @Inject constructor(
         val allCandidates = favCandidates + cooccurCandidates + ytCandidates + lbCandidates + genreCandidates
         val deduplicated = deduplicateCandidates(allCandidates, excludedSongIds)
 
-        // If candidate aggregations yielded empty (e.g. offline with no prior cache), trigger cold start fallback
-        if (deduplicated.isEmpty()) {
-            collectColdStartFallback(limit, excludedSongIds)
+        // Deterministic Fallback: If co-occurrence and seed queries return fewer than target minimum (10), pad with fallback
+        if (deduplicated.size < 10) {
+            val fallback = collectColdStartFallback(limit, excludedSongIds)
+            deduplicateCandidates(deduplicated + fallback, excludedSongIds).take(limit)
         } else {
             deduplicated.take(limit)
         }
