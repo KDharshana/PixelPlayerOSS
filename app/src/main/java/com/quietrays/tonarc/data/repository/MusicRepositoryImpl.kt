@@ -88,7 +88,8 @@ class MusicRepositoryImpl @Inject constructor(
     private val songRepository: SongRepository,
     private val favoritesDao: FavoritesDao,
     private val artistImageRepository: ArtistImageRepository,
-    private val folderTreeBuilder: FolderTreeBuilder
+    private val folderTreeBuilder: FolderTreeBuilder,
+    private val youTubeDao: com.quietrays.tonarc.data.database.YouTubeDao
 ) : MusicRepository {
 
     companion object {
@@ -669,10 +670,39 @@ class MusicRepositoryImpl @Inject constructor(
     override fun getSongsByIds(songIds: List<String>): Flow<List<Song>> {
         if (songIds.isEmpty()) return flowOf(emptyList())
         val longIds = songIds.mapNotNull { it.toLongOrNull() }
-        if (longIds.isEmpty()) return flowOf(emptyList())
-        return musicDao.getSongsByIds(longIds, emptyList(), false).map { entities ->
-            val songMap = entities.associate { it.id.toString() to it.toSong() }
-            songIds.mapNotNull { songMap[it] }
+        val nonLongIds = songIds.filter { it.toLongOrNull() == null }
+
+        val localFlow: Flow<List<Song>> = if (longIds.isNotEmpty()) {
+            musicDao.getSongsByIds(longIds, emptyList(), false).map { entities ->
+                entities.map { it.toSong() }
+            }
+        } else {
+            flowOf(emptyList())
+        }
+
+        val ytSearchIds = (nonLongIds + nonLongIds.map { it.removePrefix("youtube_") }).distinct()
+        val ytFlow: Flow<List<Song>> = if (ytSearchIds.isNotEmpty()) {
+            youTubeDao.getSongsByIds(ytSearchIds).map { entities ->
+                entities.map { it.toSong() }
+            }
+        } else {
+            flowOf(emptyList())
+        }
+
+        return combine(localFlow, ytFlow) { localList, ytList ->
+            val songMap = HashMap<String, Song>(localList.size + ytList.size * 2)
+            localList.forEach { song ->
+                songMap[song.id] = song
+            }
+            ytList.forEach { song ->
+                songMap[song.id] = song
+                val rawVideoId = song.id.removePrefix("youtube_")
+                songMap[rawVideoId] = song
+                song.youtubeId?.let { songMap[it] = song }
+            }
+            songIds.mapNotNull { id ->
+                songMap[id] ?: songMap["youtube_$id"] ?: songMap[id.removePrefix("youtube_")]
+            }
         }.flowOn(Dispatchers.IO)
     }
 

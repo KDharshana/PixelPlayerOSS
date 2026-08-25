@@ -277,6 +277,7 @@ class PlayerViewModel @Inject constructor(
     val playlistSelectionStateHolder: PlaylistSelectionStateHolder,
     private val smartPlaylistGenerator: com.quietrays.tonarc.data.repository.SmartPlaylistGenerator,
     private val youTubeRepository: com.quietrays.tonarc.data.youtube.YouTubeRepository,
+    private val youTubeDao: com.quietrays.tonarc.data.database.YouTubeDao,
     private val sessionToken: SessionToken,
     private val mediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory
 ) : ViewModel() {
@@ -1542,7 +1543,58 @@ class PlayerViewModel @Inject constructor(
 
     private var transitionSchedulerJob: Job? = null
 
+    private fun cacheYouTubeSongIfNeeded(song: Song) {
+        if (song.youtubeId != null || song.id.startsWith("youtube_") || song.path.startsWith("youtube://")) {
+            val videoId = song.youtubeId ?: song.id.removePrefix("youtube_")
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching {
+                    youTubeDao.insertSong(
+                        com.quietrays.tonarc.data.database.YouTubeSongEntity(
+                            id = song.id,
+                            videoId = videoId,
+                            playlistId = "__history__",
+                            title = song.title,
+                            artist = song.artist,
+                            album = song.album,
+                            duration = song.duration,
+                            thumbnailUrl = song.albumArtUriString,
+                            year = song.year,
+                            dateAdded = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private fun cacheYouTubeSongsIfNeeded(songs: List<Song>) {
+        val ytSongs = songs.filter { it.youtubeId != null || it.id.startsWith("youtube_") || it.path.startsWith("youtube://") }
+        if (ytSongs.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                runCatching {
+                    val entities = ytSongs.map { song ->
+                        val videoId = song.youtubeId ?: song.id.removePrefix("youtube_")
+                        com.quietrays.tonarc.data.database.YouTubeSongEntity(
+                            id = song.id,
+                            videoId = videoId,
+                            playlistId = "__history__",
+                            title = song.title,
+                            artist = song.artist,
+                            album = song.album,
+                            duration = song.duration,
+                            thumbnailUrl = song.albumArtUriString,
+                            year = song.year,
+                            dateAdded = System.currentTimeMillis()
+                        )
+                    }
+                    youTubeDao.insertSongs(entities)
+                }
+            }
+        }
+    }
+
     private fun incrementSongScore(song: Song) {
+        cacheYouTubeSongIfNeeded(song)
         listeningStatsTracker.onVoluntarySelection(song.id)
     }
 
@@ -1998,6 +2050,7 @@ class PlayerViewModel @Inject constructor(
         }
         val playbackContext =
             if (contextSongs.any { it.id == song.id }) contextSongs else listOf(song)
+        cacheYouTubeSongsIfNeeded(playbackContext)
         val controller = mediaController
         val currentQueue = _playerUiState.value.currentPlaybackQueue
         val songIndexInQueue = indexInQueue ?: currentQueue.indexOfFirst { it.id == song.id }
@@ -2911,6 +2964,7 @@ class PlayerViewModel @Inject constructor(
             transitionSchedulerJob?.cancel()
 
             val validSongs = hydrateSongsIfNeeded(songsToPlay)
+            cacheYouTubeSongsIfNeeded(validSongs)
             throwIfDirectPlaybackRequestIsStale(requestToken)
 
             if (validSongs.isEmpty()) {
@@ -2967,6 +3021,7 @@ class PlayerViewModel @Inject constructor(
             }
 
             val (shuffledQueue, startSong) = result
+            cacheYouTubeSongsIfNeeded(shuffledQueue)
             transitionSchedulerJob?.cancel()
 
             playbackStateHolder.updateStablePlayerState { it.copy(isShuffleEnabled = true) }

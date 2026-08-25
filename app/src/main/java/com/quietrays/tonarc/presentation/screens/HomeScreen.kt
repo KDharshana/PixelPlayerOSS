@@ -188,11 +188,22 @@ fun HomeScreen(
     val usesFallbackHomeMix = remember(curatedYourMixSongs, dailyMixSongs) {
         curatedYourMixSongs.isEmpty() && dailyMixSongs.isEmpty()
     }
-    val yourMixSongs = remember(curatedYourMixSongs, dailyMixSongs, homeMixPreviewSongs) {
-        when {
+    val yourMixSongs = remember(curatedYourMixSongs, dailyMixSongs, homeMixPreviewSongs, selectedHomeFilter) {
+        val baseMix = when {
             curatedYourMixSongs.isNotEmpty() -> curatedYourMixSongs
             dailyMixSongs.isNotEmpty() -> dailyMixSongs
             else -> homeMixPreviewSongs
+        }
+        when (selectedHomeFilter) {
+            HomeFilter.ALL -> baseMix
+            HomeFilter.YOUTUBE_MUSIC -> {
+                val ytOnly = baseMix.filter { it.youtubeId != null || it.id.startsWith("youtube_") || it.path.startsWith("youtube://") }.toImmutableList()
+                if (ytOnly.isNotEmpty()) ytOnly else baseMix
+            }
+            HomeFilter.LOCAL_ONLY -> {
+                val localOnly = baseMix.filter { it.youtubeId == null && !it.id.startsWith("youtube_") && !it.path.startsWith("youtube://") }.toImmutableList()
+                if (localOnly.isNotEmpty()) localOnly else baseMix
+            }
         }
     }
     var homePlaceholderRefreshGeneration by rememberSaveable { mutableIntStateOf(0) }
@@ -256,6 +267,30 @@ fun HomeScreen(
 
     val recentlyPlayedQueue = remember(recentlyPlayedSongs) {
         recentlyPlayedSongs.map { it.song }.toImmutableList()
+    }
+
+    val filteredDailyMixSongs = remember(dailyMixSongs, selectedHomeFilter) {
+        when (selectedHomeFilter) {
+            HomeFilter.ALL -> dailyMixSongs
+            HomeFilter.YOUTUBE_MUSIC -> dailyMixSongs.filter { it.youtubeId != null || it.id.startsWith("youtube_") || it.path.startsWith("youtube://") }.toImmutableList()
+            HomeFilter.LOCAL_ONLY -> dailyMixSongs.filter { it.youtubeId == null && !it.id.startsWith("youtube_") && !it.path.startsWith("youtube://") }.toImmutableList()
+        }
+    }
+
+    val filteredRecentlyPlayedSongs = remember(recentlyPlayedSongs, selectedHomeFilter) {
+        when (selectedHomeFilter) {
+            HomeFilter.ALL -> recentlyPlayedSongs
+            HomeFilter.YOUTUBE_MUSIC -> recentlyPlayedSongs.filter { it.song.youtubeId != null || it.song.id.startsWith("youtube_") || it.song.path.startsWith("youtube://") }
+            HomeFilter.LOCAL_ONLY -> recentlyPlayedSongs.filter { it.song.youtubeId == null && !it.song.id.startsWith("youtube_") && !it.song.path.startsWith("youtube://") }
+        }
+    }
+
+    val filteredKeepListeningSongs = remember(keepListeningSongs, selectedHomeFilter) {
+        when (selectedHomeFilter) {
+            HomeFilter.ALL -> keepListeningSongs
+            HomeFilter.YOUTUBE_MUSIC -> keepListeningSongs.filter { it.youtubeId != null || it.id.startsWith("youtube_") || it.path.startsWith("youtube://") }.toImmutableList()
+            HomeFilter.LOCAL_ONLY -> keepListeningSongs.filter { it.youtubeId == null && !it.id.startsWith("youtube_") && !it.path.startsWith("youtube://") }.toImmutableList()
+        }
     }
 
     ReportDrawnWhen {
@@ -669,13 +704,13 @@ fun HomeScreen(
                     }
                 }
 
-                if (dailyMixSongs.isNotEmpty() && selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
+                if (filteredDailyMixSongs.isNotEmpty()) {
                     item(
                         key = "daily_mix_section",
                         contentType = "daily_mix_section"
                     ) {
                         DailyMixSection(
-                            songs = dailyMixSongs,
+                            songs = filteredDailyMixSongs,
                             onClickOpen = {
                                 navController.navigateSafely(Screen.DailyMixScreen.route)
                             },
@@ -701,17 +736,20 @@ fun HomeScreen(
                     }
                 }
 
-                if (recentlyPlayedSongs.size >= RecentlyPlayedSectionMinSongsToShow && selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
+                if (filteredRecentlyPlayedSongs.size >= RecentlyPlayedSectionMinSongsToShow) {
                     item(
                         key = "recently_played_section",
                         contentType = "recently_played_section"
                     ) {
+                        val recentlyPlayedFilteredQueue = remember(filteredRecentlyPlayedSongs) {
+                            filteredRecentlyPlayedSongs.map { it.song }.toImmutableList()
+                        }
                         RecentlyPlayedSection(
-                            songs = remember(recentlyPlayedSongs) { recentlyPlayedSongs.toImmutableList() },
+                            songs = remember(filteredRecentlyPlayedSongs) { filteredRecentlyPlayedSongs.toImmutableList() },
                             onSongClick = { song ->
-                                if (recentlyPlayedQueue.isNotEmpty()) {
+                                if (recentlyPlayedFilteredQueue.isNotEmpty()) {
                                     playerViewModel.playSongs(
-                                        songsToPlay = recentlyPlayedQueue,
+                                        songsToPlay = recentlyPlayedFilteredQueue,
                                         startSong = song,
                                         queueName = "Recently Played"
                                     )
@@ -727,7 +765,7 @@ fun HomeScreen(
                     }
                 }
 
-                if (keepListeningSongs.isNotEmpty() && selectedHomeFilter != HomeFilter.YOUTUBE_MUSIC) {
+                if (filteredKeepListeningSongs.isNotEmpty()) {
                     item(
                         key = "keep_listening_section",
                         contentType = "keep_listening_section"
@@ -735,11 +773,11 @@ fun HomeScreen(
                         HorizontalSongCarouselSection(
                             title = "Keep Listening",
                             subtitle = "Pick up where you left off",
-                            songs = keepListeningSongs,
+                            songs = filteredKeepListeningSongs,
                             currentPlayingSongId = currentSong?.id,
                             isPlaying = isPlaying,
                             onSongClick = { song ->
-                                playerViewModel.showAndPlaySong(song, keepListeningSongs, "Keep Listening")
+                                playerViewModel.showAndPlaySong(song, filteredKeepListeningSongs, "Keep Listening")
                             }
                         )
                     }

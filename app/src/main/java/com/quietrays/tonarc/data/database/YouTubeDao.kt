@@ -27,8 +27,11 @@ interface YouTubeDao {
     @Query("SELECT * FROM youtube_songs WHERE title LIKE '%' || :query || '%' OR artist LIKE '%' || :query || '%'")
     fun searchSongs(query: String): Flow<List<YouTubeSongEntity>>
 
-    @Query("SELECT * FROM youtube_songs WHERE id IN (:ids)")
+    @Query("SELECT * FROM youtube_songs WHERE id IN (:ids) OR video_id IN (:ids)")
     fun getSongsByIds(ids: List<String>): Flow<List<YouTubeSongEntity>>
+
+    @Query("SELECT * FROM youtube_songs WHERE id IN (:ids) OR video_id IN (:ids)")
+    suspend fun getSongsByIdsList(ids: List<String>): List<YouTubeSongEntity>
 
     @Query("SELECT * FROM youtube_songs WHERE video_id = :videoId LIMIT 1")
     suspend fun getSongByVideoId(videoId: String): YouTubeSongEntity?

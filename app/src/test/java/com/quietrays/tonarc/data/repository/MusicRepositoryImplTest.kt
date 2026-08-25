@@ -38,6 +38,7 @@ class MusicRepositoryImplTest {
     private val mockSongRepository: SongRepository = mockk(relaxed = true)
     private val mockFavoritesDao: FavoritesDao = mockk(relaxed = true)
     private val mockArtistImageRepository: ArtistImageRepository = mockk(relaxed = true)
+    private val mockYouTubeDao: com.quietrays.tonarc.data.database.YouTubeDao = mockk(relaxed = true)
 
     private val testDispatcher = StandardTestDispatcher()
 
@@ -82,8 +83,7 @@ class MusicRepositoryImplTest {
              }
         }
         every { mockMusicDao.getArtists(any(), eq(false)) } returns flowOf(dummyArtists)
-
-
+        every { mockYouTubeDao.getSongsByIds(any()) } returns flowOf(emptyList())
 
         musicRepository = MusicRepositoryImpl(
             context = mockContext,
@@ -93,10 +93,10 @@ class MusicRepositoryImplTest {
             musicDao = mockMusicDao,
             lyricsRepository = mockLyricsRepository,
             songRepository = mockSongRepository,
-
             favoritesDao = mockFavoritesDao,
             artistImageRepository = mockArtistImageRepository,
-            folderTreeBuilder = mockk(relaxed = true)
+            folderTreeBuilder = mockk(relaxed = true),
+            youTubeDao = mockYouTubeDao
         )
     }
 
@@ -303,6 +303,34 @@ class MusicRepositoryImplTest {
                 mockSearchHistoryDao.deleteByQuery(query)
                 mockSearchHistoryDao.insert(any())
             }
+        }
+
+        @Test
+        fun `getSongsByIds resolves both local and YouTube song IDs`() = runTest(testDispatcher) {
+            val localEntity = createSongEntity(123L, "Local Song", "Local Artist", "Pop", "/music/song.mp3", "/music")
+            val ytEntity = com.quietrays.tonarc.data.database.YouTubeSongEntity(
+                id = "youtube_abc123",
+                videoId = "abc123",
+                playlistId = "__history__",
+                title = "YouTube Track",
+                artist = "YouTube Artist",
+                album = "YouTube Album",
+                duration = 200,
+                thumbnailUrl = "https://thumb.url",
+                year = 2024,
+                dateAdded = 1000L
+            )
+
+            every { mockMusicDao.getSongsByIds(listOf(123L), any(), any()) } returns flowOf(listOf(localEntity))
+            every { mockYouTubeDao.getSongsByIds(match { it.contains("youtube_abc123") || it.contains("abc123") }) } returns flowOf(listOf(ytEntity))
+
+            val songs = musicRepository.getSongsByIds(listOf("123", "youtube_abc123")).first()
+
+            org.junit.jupiter.api.Assertions.assertEquals(2, songs.size)
+            org.junit.jupiter.api.Assertions.assertEquals("123", songs[0].id)
+            org.junit.jupiter.api.Assertions.assertEquals("Local Song", songs[0].title)
+            org.junit.jupiter.api.Assertions.assertEquals("youtube_abc123", songs[1].id)
+            org.junit.jupiter.api.Assertions.assertEquals("YouTube Track", songs[1].title)
         }
     }
 

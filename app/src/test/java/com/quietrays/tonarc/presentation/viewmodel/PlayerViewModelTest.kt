@@ -89,6 +89,7 @@ class PlayerViewModelTest {
     private val mockPlaylistSelectionStateHolder: PlaylistSelectionStateHolder = mockk(relaxed = true)
     private val mockSmartPlaylistGenerator: com.quietrays.tonarc.data.repository.SmartPlaylistGenerator = mockk(relaxed = true)
     private val mockYouTubeRepository: com.quietrays.tonarc.data.youtube.YouTubeRepository = mockk(relaxed = true)
+    private val mockYouTubeDao: com.quietrays.tonarc.data.database.YouTubeDao = mockk(relaxed = true)
     private lateinit var mockMediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory
 
     private val testDispatcher = StandardTestDispatcher()
@@ -234,6 +235,7 @@ class PlayerViewModelTest {
             mockPlaylistSelectionStateHolder,
             mockSmartPlaylistGenerator,
             mockYouTubeRepository,
+            mockYouTubeDao,
             sessionToken,
             mockMediaControllerFactory
         )
