@@ -90,6 +90,7 @@ class PlayerViewModelTest {
     private val mockSmartPlaylistGenerator: com.quietrays.tonarc.data.repository.SmartPlaylistGenerator = mockk(relaxed = true)
     private val mockYouTubeRepository: com.quietrays.tonarc.data.youtube.YouTubeRepository = mockk(relaxed = true)
     private val mockYouTubeDao: com.quietrays.tonarc.data.database.YouTubeDao = mockk(relaxed = true)
+    private val mockInnertubeApiService: com.quietrays.tonarc.data.network.youtube.InnertubeApiService = mockk(relaxed = true)
     private lateinit var mockMediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory
 
     private val testDispatcher = StandardTestDispatcher()
@@ -236,6 +237,7 @@ class PlayerViewModelTest {
             mockSmartPlaylistGenerator,
             mockYouTubeRepository,
             mockYouTubeDao,
+            mockInnertubeApiService,
             sessionToken,
             mockMediaControllerFactory
         )
@@ -440,6 +442,138 @@ class PlayerViewModelTest {
             assertEquals(true, awaitItem())
             cancelAndConsumeRemainingEvents()
         }
+    }
+
+    @Test
+    fun `toggleFavorite on YouTube song triggers like sync and updates dao`() = runTest {
+        val ytSong = Song(
+            id = "youtube_dQw4w9WgXcQ",
+            title = "Never Gonna Give You Up",
+            artist = "Rick Astley",
+            artistId = -1L,
+            album = "Whenever You Need Somebody",
+            albumId = -1L,
+            path = "youtube://dQw4w9WgXcQ",
+            contentUriString = "youtube://dQw4w9WgXcQ",
+            albumArtUriString = null,
+            duration = 213000L,
+            mimeType = "audio/webm",
+            bitrate = 160000,
+            sampleRate = 48000,
+            youtubeId = "dQw4w9WgXcQ"
+        )
+        every { mockInnertubeApiService.authCookies } returns "SAPISID=123"
+        coEvery { mockInnertubeApiService.setLikeStatus(any(), any()) } returns true
+        stablePlayerStateFlow.value = StablePlayerState(currentSong = ytSong)
+
+        playerViewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        coVerify { mockMusicRepository.setFavoriteStatus("youtube_dQw4w9WgXcQ", true) }
+        coVerify { mockYouTubeRepository.saveSong(ytSong, playlistId = "__favorites__") }
+        coVerify {
+            mockYouTubeDao.insertSong(match {
+                it.id == "youtube_dQw4w9WgXcQ" &&
+                it.videoId == "dQw4w9WgXcQ" &&
+                it.playlistId == "__liked_music__"
+            })
+        }
+        coVerify { mockInnertubeApiService.setLikeStatus("dQw4w9WgXcQ", true) }
+    }
+
+    @Test
+    fun `toggleFavorite on YouTube song when already favorited removes like and calls setLikeStatus with false`() = runTest {
+        val ytSong = Song(
+            id = "youtube_dQw4w9WgXcQ",
+            title = "Never Gonna Give You Up",
+            artist = "Rick Astley",
+            artistId = -1L,
+            album = "Whenever You Need Somebody",
+            albumId = -1L,
+            path = "youtube://dQw4w9WgXcQ",
+            contentUriString = "youtube://dQw4w9WgXcQ",
+            albumArtUriString = null,
+            duration = 213000L,
+            mimeType = "audio/webm",
+            bitrate = 160000,
+            sampleRate = 48000,
+            youtubeId = "dQw4w9WgXcQ"
+        )
+        _favoriteIdsFlow.value = setOf("youtube_dQw4w9WgXcQ")
+        every { mockInnertubeApiService.authCookies } returns "SAPISID=123"
+        coEvery { mockInnertubeApiService.setLikeStatus(any(), any()) } returns true
+        stablePlayerStateFlow.value = StablePlayerState(currentSong = ytSong)
+
+        playerViewModel.favoriteSongIds.test {
+            assertEquals(emptySet<String>(), awaitItem())
+            assertEquals(setOf("youtube_dQw4w9WgXcQ"), awaitItem())
+
+            playerViewModel.toggleFavorite()
+            advanceUntilIdle()
+
+            coVerify { mockMusicRepository.setFavoriteStatus("youtube_dQw4w9WgXcQ", false) }
+            coVerify { mockYouTubeRepository.deleteSong("youtube_dQw4w9WgXcQ") }
+            coVerify { mockYouTubeDao.deleteSong("youtube_dQw4w9WgXcQ") }
+            coVerify { mockInnertubeApiService.setLikeStatus("dQw4w9WgXcQ", false) }
+            cancelAndConsumeRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `toggleFavoriteSpecificSong on YouTube song triggers setLikeStatus`() = runTest {
+        val ytSong = Song(
+            id = "youtube_dQw4w9WgXcQ",
+            title = "Never Gonna Give You Up",
+            artist = "Rick Astley",
+            artistId = -1L,
+            album = "Whenever You Need Somebody",
+            albumId = -1L,
+            path = "youtube://dQw4w9WgXcQ",
+            contentUriString = "youtube://dQw4w9WgXcQ",
+            albumArtUriString = null,
+            duration = 213000L,
+            mimeType = "audio/webm",
+            bitrate = null,
+            sampleRate = null,
+            youtubeId = "dQw4w9WgXcQ"
+        )
+        every { mockInnertubeApiService.authCookies } returns "SAPISID=123"
+        coEvery { mockInnertubeApiService.setLikeStatus(any(), any()) } returns true
+
+        playerViewModel.toggleFavoriteSpecificSong(ytSong)
+        advanceUntilIdle()
+
+        coVerify { mockMusicRepository.setFavoriteStatus("youtube_dQw4w9WgXcQ", true) }
+        coVerify { mockYouTubeDao.insertSong(match { it.playlistId == "__liked_music__" }) }
+        coVerify { mockInnertubeApiService.setLikeStatus("dQw4w9WgXcQ", true) }
+    }
+
+    @Test
+    fun `toggleFavorite on YouTube song does not call setLikeStatus when authCookies is blank`() = runTest {
+        val ytSong = Song(
+            id = "youtube_dQw4w9WgXcQ",
+            title = "Never Gonna Give You Up",
+            artist = "Rick Astley",
+            artistId = -1L,
+            album = "Whenever You Need Somebody",
+            albumId = -1L,
+            path = "youtube://dQw4w9WgXcQ",
+            contentUriString = "youtube://dQw4w9WgXcQ",
+            albumArtUriString = null,
+            duration = 213000L,
+            mimeType = "audio/webm",
+            bitrate = null,
+            sampleRate = null,
+            youtubeId = "dQw4w9WgXcQ"
+        )
+        every { mockInnertubeApiService.authCookies } returns ""
+        stablePlayerStateFlow.value = StablePlayerState(currentSong = ytSong)
+
+        playerViewModel.toggleFavorite()
+        advanceUntilIdle()
+
+        coVerify { mockMusicRepository.setFavoriteStatus("youtube_dQw4w9WgXcQ", true) }
+        coVerify(exactly = 0) { mockInnertubeApiService.setLikeStatus(any(), any()) }
     }
 
     @Nested

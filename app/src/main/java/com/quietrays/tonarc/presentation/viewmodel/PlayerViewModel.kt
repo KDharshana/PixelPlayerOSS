@@ -38,6 +38,8 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.quietrays.tonarc.R
 import com.quietrays.tonarc.data.EotStateHolder
 import com.quietrays.tonarc.data.database.AlbumArtThemeDao
+import com.quietrays.tonarc.data.database.YouTubeSongEntity
+import com.quietrays.tonarc.data.network.youtube.InnertubeApiService
 import com.quietrays.tonarc.data.media.CoverArtUpdate
 import com.quietrays.tonarc.data.model.Album
 import com.quietrays.tonarc.data.model.Artist
@@ -278,6 +280,7 @@ class PlayerViewModel @Inject constructor(
     private val smartPlaylistGenerator: com.quietrays.tonarc.data.repository.SmartPlaylistGenerator,
     private val youTubeRepository: com.quietrays.tonarc.data.youtube.YouTubeRepository,
     private val youTubeDao: com.quietrays.tonarc.data.database.YouTubeDao,
+    private val innertubeApiService: InnertubeApiService,
     private val sessionToken: SessionToken,
     private val mediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory
 ) : ViewModel() {
@@ -3360,7 +3363,39 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val favoriteSongId = resolveFavoriteSongId(currentSong) ?: return@launch
             val currentlyFavorite = favoriteSongIds.value.contains(favoriteSongId)
-            setFavoriteStatusEverywhere(favoriteSongId, !currentlyFavorite)
+            val targetFavoriteState = !currentlyFavorite
+            setFavoriteStatusEverywhere(favoriteSongId, targetFavoriteState)
+            val videoId = currentSong.youtubeId ?: currentSong.id.takeIf { it.startsWith("youtube_") }?.removePrefix("youtube_")
+            if (videoId != null) {
+                if (targetFavoriteState) {
+                    youTubeRepository.saveSong(currentSong, playlistId = "__favorites__")
+                    val likedEntity = YouTubeSongEntity(
+                        id = currentSong.id,
+                        videoId = videoId,
+                        playlistId = "__liked_music__",
+                        title = currentSong.title,
+                        artist = currentSong.artist,
+                        album = currentSong.album,
+                        duration = currentSong.duration,
+                        thumbnailUrl = currentSong.albumArtUriString,
+                        year = currentSong.year,
+                        dateAdded = System.currentTimeMillis()
+                    )
+                    youTubeDao.insertSong(likedEntity)
+                } else {
+                    youTubeRepository.deleteSong(currentSong.id)
+                    youTubeDao.deleteSong(currentSong.id)
+                }
+                if (!innertubeApiService.authCookies.isNullOrBlank()) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            innertubeApiService.setLikeStatus(videoId, targetFavoriteState)
+                        } catch (e: Exception) {
+                            Timber.tag("PlayerViewModel").e(e, "Failed to sync like status with YouTube Music")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -3370,11 +3405,35 @@ class PlayerViewModel @Inject constructor(
             val currentlyFavorite = favoriteSongIds.value.contains(favoriteSongId)
             val targetFavoriteState = if (removing) false else !currentlyFavorite
             setFavoriteStatusEverywhere(favoriteSongId, targetFavoriteState)
-            if (song.youtubeId != null || song.id.startsWith("youtube_")) {
+            val videoId = song.youtubeId ?: song.id.takeIf { it.startsWith("youtube_") }?.removePrefix("youtube_")
+            if (videoId != null) {
                 if (targetFavoriteState) {
                     youTubeRepository.saveSong(song, playlistId = "__favorites__")
+                    val likedEntity = YouTubeSongEntity(
+                        id = song.id,
+                        videoId = videoId,
+                        playlistId = "__liked_music__",
+                        title = song.title,
+                        artist = song.artist,
+                        album = song.album,
+                        duration = song.duration,
+                        thumbnailUrl = song.albumArtUriString,
+                        year = song.year,
+                        dateAdded = System.currentTimeMillis()
+                    )
+                    youTubeDao.insertSong(likedEntity)
                 } else {
                     youTubeRepository.deleteSong(song.id)
+                    youTubeDao.deleteSong(song.id)
+                }
+                if (!innertubeApiService.authCookies.isNullOrBlank()) {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            innertubeApiService.setLikeStatus(videoId, targetFavoriteState)
+                        } catch (e: Exception) {
+                            Timber.tag("PlayerViewModel").e(e, "Failed to sync like status with YouTube Music")
+                        }
+                    }
                 }
             }
         }
