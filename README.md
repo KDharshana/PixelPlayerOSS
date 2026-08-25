@@ -270,7 +270,7 @@ Tonarc is licensed under the terms of the **GNU General Public License v3.0** (`
 
 ```text
 Tonarc
-Copyright (C) 2026 KDharshana and Contributors
+Copyright (C) 2026 dharshan-X and Contributors
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
