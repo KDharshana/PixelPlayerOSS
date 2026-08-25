@@ -509,6 +509,35 @@ class InnertubeApiService @Inject constructor(
         }
     }
 
+    suspend fun setLikeStatus(videoId: String, isLiked: Boolean): Boolean = withContext(Dispatchers.IO) {
+        val endpoint = if (isLiked) "like/like" else "like/removelike"
+        android.util.Log.d("YouTubeMusic", "setLikeStatus requested: videoId=$videoId, isLiked=$isLiked, endpoint=$endpoint")
+        try {
+            val body = JSONObject().apply {
+                put("context", createBaseContext())
+                put("target", JSONObject().apply {
+                    put("videoId", videoId)
+                })
+            }
+            val request = buildRequest(endpoint, body)
+            val response = okHttpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string()
+                if (responseBody != null) {
+                    extractVisitorData(responseBody)
+                }
+                android.util.Log.d("YouTubeMusic", "setLikeStatus succeeded for videoId=$videoId (isLiked=$isLiked)")
+                true
+            } else {
+                android.util.Log.w("YouTubeMusic", "setLikeStatus failed: HTTP ${response.code} for videoId=$videoId (endpoint=$endpoint)")
+                false
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("YouTubeMusic", "Error in setLikeStatus for videoId=$videoId", e)
+            false
+        }
+    }
+
     /**
      * Self-diagnostic method to test YouTube Music API connectivity.
      */
