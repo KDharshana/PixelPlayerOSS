@@ -38,10 +38,22 @@ shared/build/
 baselineprofile/build/
 
 misc.xml
-CLAUDE.md
 markdown.xml
 .vscode/
-.agents/
+
+# AI Agent & Assistant Files
+CLAUDE.md
 /AGENTS.md
+AGENTS.md
+CONTEXT.md
+.agents/
+.claude/
+.claude.json
+.gemini/
+.antigravity/
+.cursor/
+.cursorrules
+docs/agents/
+.github/workflows/claude.yml
 
 graphify-out/
