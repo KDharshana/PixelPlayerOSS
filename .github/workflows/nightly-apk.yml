@@ -103,20 +103,32 @@ jobs:
         env:
           CI_KEYSTORE_B64: ${{ secrets.CI_KEYSTORE_B64 }}
           CI_KEYSTORE_PASSWORD: ${{ secrets.CI_KEYSTORE_PASSWORD }}
+          CI_KEYSTORE_ALIAS: ${{ secrets.CI_KEYSTORE_ALIAS }}
         run: |
           if [ -n "$CI_KEYSTORE_B64" ] && [ -n "$CI_KEYSTORE_PASSWORD" ]; then
             KEYSTORE_PASSWORD="$CI_KEYSTORE_PASSWORD"
             printf '%s' "$CI_KEYSTORE_B64" | base64 -d > tonarc-ci.jks
+            KEY_ALIAS="${CI_KEYSTORE_ALIAS:-}"
+            if [ -z "$KEY_ALIAS" ]; then
+              KEY_ALIAS="$(keytool -list -keystore tonarc-ci.jks -storepass "$KEYSTORE_PASSWORD" | grep -i "PrivateKeyEntry" | head -n 1 | cut -d, -f1 | xargs || true)"
+            fi
+            if [ -z "$KEY_ALIAS" ]; then
+              KEY_ALIAS="$(keytool -list -keystore tonarc-ci.jks -storepass "$KEYSTORE_PASSWORD" | grep -i "Entry" | head -n 1 | cut -d, -f1 | xargs || true)"
+            fi
+            if [ -z "$KEY_ALIAS" ]; then
+              KEY_ALIAS="tonarc-ci-key"
+            fi
           else
             KEYSTORE_PASSWORD="$(openssl rand -hex 24)"
-            keytool -genkey -v -keystore tonarc-ci.jks -alias tonarc-ci-key -keyalg RSA -keysize 4096 -validity 10000 \
+            KEY_ALIAS="tonarc-ci-key"
+            keytool -genkey -v -keystore tonarc-ci.jks -alias "$KEY_ALIAS" -keyalg RSA -keysize 4096 -validity 10000 \
               -storepass "$KEYSTORE_PASSWORD" -keypass "$KEYSTORE_PASSWORD" \
               -dname "CN=Tonarc CI Throwaway, OU=Dev, O=QuietRays, L=World, S=World, C=US"
           fi
           {
             echo "storeFile=tonarc-ci.jks"
             echo "storePassword=$KEYSTORE_PASSWORD"
-            echo "keyAlias=tonarc-ci-key"
+            echo "keyAlias=$KEY_ALIAS"
             echo "keyPassword=$KEYSTORE_PASSWORD"
           } > keystore.properties
 
