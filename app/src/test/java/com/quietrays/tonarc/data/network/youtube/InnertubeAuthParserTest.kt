@@ -122,10 +122,10 @@ class InnertubeAuthParserTest {
         val parsed = InnertubeAuthParser.parse(input)
         assertTrue(parsed.isValid)
         assertEquals("HUXEMsqUNCiUDLz6/A6X9Dej6nkrabBkwt", parsed.sapisid)
-        assertTrue(parsed.cookies.contains("SAPISID=HUXEMsqUNCiUDLz6/A6X9Dej6nkrabBkwt"))
-        assertTrue(parsed.cookies.contains("__Secure-1PSIDTS=sidts-123"))
+        assertTrue(parsed.cookies?.contains("SAPISID=HUXEMsqUNCiUDLz6/A6X9Dej6nkrabBkwt") == true)
+        assertTrue(parsed.cookies?.contains("__Secure-1PSIDTS=sidts-123") == true)
         assertNotNull(parsed.visitorData)
-        assertTrue(parsed.visitorData.startsWith("CgtQQ2tUVVA3bEdUSS"))
-        assertTrue(parsed.visitorData.endsWith("==")) // URL decoded %3D%3D -> ==
+        assertTrue(parsed.visitorData?.startsWith("CgtQQ2tUVVA3bEdUSS") == true)
+        assertTrue(parsed.visitorData?.endsWith("==") == true) // URL decoded %3D%3D -> ==
     }
 }

@@ -339,6 +339,58 @@ class InnertubeApiService @Inject constructor(
         }
     }
 
+    suspend fun getLikedSongs(continuation: String? = null): Pair<List<InnertubeTrack>, String?> = withContext(Dispatchers.IO) {
+        android.util.Log.d("YouTubeMusic", "getLikedSongs requested: continuation=${continuation != null}")
+        try {
+            val body = JSONObject().apply {
+                put("context", createBaseContext())
+                if (!continuation.isNullOrBlank()) {
+                    put("continuation", continuation)
+                } else {
+                    put("browseId", "FEmusic_liked_videos")
+                }
+            }
+            val request = buildRequest("browse", body)
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                android.util.Log.w("YouTubeMusic", "Liked songs browse API error: ${response.code}")
+                return@withContext emptyList<InnertubeTrack>() to null
+            }
+            val responseBody = response.body?.string() ?: return@withContext emptyList<InnertubeTrack>() to null
+            extractVisitorData(responseBody)
+            InnertubeParser.parseLikedSongs(responseBody)
+        } catch (e: Exception) {
+            android.util.Log.e("YouTubeMusic", "Error fetching liked songs", e)
+            emptyList<InnertubeTrack>() to null
+        }
+    }
+
+    suspend fun getUserPlaylists(continuation: String? = null): Pair<List<InnertubePlaylist>, String?> = withContext(Dispatchers.IO) {
+        android.util.Log.d("YouTubeMusic", "getUserPlaylists requested: continuation=${continuation != null}")
+        try {
+            val body = JSONObject().apply {
+                put("context", createBaseContext())
+                if (!continuation.isNullOrBlank()) {
+                    put("continuation", continuation)
+                } else {
+                    put("browseId", "FEmusic_library_playlists")
+                }
+            }
+            val request = buildRequest("browse", body)
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                android.util.Log.w("YouTubeMusic", "User playlists browse API error: ${response.code}")
+                return@withContext emptyList<InnertubePlaylist>() to null
+            }
+            val responseBody = response.body?.string() ?: return@withContext emptyList<InnertubePlaylist>() to null
+            extractVisitorData(responseBody)
+            InnertubeParser.parseLibraryPlaylists(responseBody)
+        } catch (e: Exception) {
+            android.util.Log.e("YouTubeMusic", "Error fetching user playlists", e)
+            emptyList<InnertubePlaylist>() to null
+        }
+    }
+
     suspend fun getPlaylist(playlistId: String): Pair<InnertubePlaylist, List<InnertubeTrack>>? = withContext(Dispatchers.IO) {
         val actualBrowseId = if (!playlistId.startsWith("VL") && playlistId.startsWith("PL")) "VL$playlistId" else playlistId
         android.util.Log.d("YouTubeMusic", "getPlaylist requested: $playlistId -> $actualBrowseId")

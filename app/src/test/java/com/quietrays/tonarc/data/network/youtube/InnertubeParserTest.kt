@@ -225,4 +225,269 @@ class InnertubeParserTest {
         assertThat(radioTracks[1].artist).isEqualTo("Queen")
         assertThat(radioTracks[1].durationSeconds).isEqualTo(209L)
     }
+
+    @Test
+    fun parseLikedSongs_extractsTracksAndContinuationToken() {
+        val json = """
+            {
+              "contents": {
+                "singleColumnBrowseResultsRenderer": {
+                  "tabs": [{
+                    "tabRenderer": {
+                      "content": {
+                        "sectionListRenderer": {
+                          "contents": [{
+                            "musicPlaylistShelfRenderer": {
+                              "contents": [
+                                {
+                                  "musicResponsiveListItemRenderer": {
+                                    "playlistItemData": { "videoId": "vid_liked_1" },
+                                    "flexColumns": [
+                                      { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Liked Song 1" }] } } },
+                                      { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Artist 1" }] } } },
+                                      { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Album One" }] } } }
+                                    ],
+                                    "fixedColumns": [
+                                      { "musicResponsiveListItemFixedColumnRenderer": { "text": { "runs": [{ "text": "3:45" }] } } }
+                                    ],
+                                    "thumbnail": {
+                                      "musicThumbnailRenderer": {
+                                        "thumbnail": {
+                                          "thumbnails": [{ "url": "https://lh3.googleusercontent.com/sample_thumb=w120-h120" }]
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "musicResponsiveListItemRenderer": {
+                                    "playlistItemData": { "videoId": "vid_liked_2" },
+                                    "flexColumns": [
+                                      { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Liked Song 2" }] } } },
+                                      { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Artist 2" }] } } }
+                                    ],
+                                    "fixedColumns": [
+                                      { "musicResponsiveListItemFixedColumnRenderer": { "text": { "runs": [{ "text": "4:20" }] } } }
+                                    ]
+                                  }
+                                }
+                              ],
+                              "continuations": [{ "nextContinuationData": { "continuation": "cont_token_liked_songs" } }]
+                            }
+                          }]
+                        }
+                      }
+                    }
+                  }]
+                }
+              }
+            }
+        """.trimIndent()
+
+        val (tracks, continuation) = InnertubeParser.parseLikedSongs(json)
+        assertThat(tracks).hasSize(2)
+        assertThat(tracks[0].videoId).isEqualTo("vid_liked_1")
+        assertThat(tracks[0].title).isEqualTo("Liked Song 1")
+        assertThat(tracks[0].artist).isEqualTo("Artist 1")
+        assertThat(tracks[0].durationSeconds).isEqualTo(225L)
+        assertThat(tracks[0].thumbnailUri).contains("=w1024-h1024")
+        assertThat(tracks[1].videoId).isEqualTo("vid_liked_2")
+        assertThat(tracks[1].title).isEqualTo("Liked Song 2")
+        assertThat(tracks[1].artist).isEqualTo("Artist 2")
+        assertThat(tracks[1].durationSeconds).isEqualTo(260L)
+        assertThat(continuation).isEqualTo("cont_token_liked_songs")
+    }
+
+    @Test
+    fun parseLikedSongs_handlesContinuationPayload() {
+        val json = """
+            {
+              "continuationContents": {
+                "musicPlaylistShelfContinuation": {
+                  "contents": [
+                    {
+                      "musicResponsiveListItemRenderer": {
+                        "playlistItemData": { "videoId": "vid_liked_paged_1" },
+                        "flexColumns": [
+                          { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Paged Song 1" }] } } },
+                          { "musicResponsiveListItemFlexColumnRenderer": { "text": { "runs": [{ "text": "Paged Artist" }] } } }
+                        ],
+                        "fixedColumns": [
+                          { "musicResponsiveListItemFixedColumnRenderer": { "text": { "runs": [{ "text": "2:30" }] } } }
+                        ]
+                      }
+                    }
+                  ],
+                  "continuations": [
+                    { "nextContinuationData": { "continuation": "next_page_token_456" } }
+                  ]
+                }
+              }
+            }
+        """.trimIndent()
+
+        val (tracks, continuation) = InnertubeParser.parseLikedSongs(json)
+        assertThat(tracks).hasSize(1)
+        assertThat(tracks[0].videoId).isEqualTo("vid_liked_paged_1")
+        assertThat(tracks[0].title).isEqualTo("Paged Song 1")
+        assertThat(tracks[0].artist).isEqualTo("Paged Artist")
+        assertThat(tracks[0].durationSeconds).isEqualTo(150L)
+        assertThat(continuation).isEqualTo("next_page_token_456")
+    }
+
+    @Test
+    fun parseLikedSongs_handlesMalformedJsonGracefully() {
+        val (tracks1, cont1) = InnertubeParser.parseLikedSongs("{ invalid json ]")
+        assertThat(tracks1).isEmpty()
+        assertThat(cont1).isNull()
+
+        val (tracks2, cont2) = InnertubeParser.parseLikedSongs("{}")
+        assertThat(tracks2).isEmpty()
+        assertThat(cont2).isNull()
+    }
+
+    @Test
+    fun parseLibraryPlaylists_extractsPlaylistsAndContinuationTokenFromGrid() {
+        val json = """
+            {
+              "contents": {
+                "singleColumnBrowseResultsRenderer": {
+                  "tabs": [{
+                    "tabRenderer": {
+                      "content": {
+                        "sectionListRenderer": {
+                          "contents": [{
+                            "gridRenderer": {
+                              "items": [
+                                {
+                                  "musicTwoRowItemRenderer": {
+                                    "title": { "runs": [{ "text": "Chill Vibes" }] },
+                                    "subtitle": {
+                                      "runs": [
+                                        { "text": "Playlist" },
+                                        { "text": " • " },
+                                        { "text": "YouTube Music" },
+                                        { "text": " • " },
+                                        { "text": "45 songs" }
+                                      ]
+                                    },
+                                    "navigationEndpoint": {
+                                      "browseEndpoint": {
+                                        "browseId": "VLPLchill123",
+                                        "browseEndpointContextSupportedConfigs": {
+                                          "browseEndpointContextMusicConfig": {
+                                            "pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    "thumbnailRenderer": {
+                                      "musicThumbnailRenderer": {
+                                        "thumbnail": {
+                                          "thumbnails": [{ "url": "https://lh3.googleusercontent.com/pl_thumb=w200-h200" }]
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "musicTwoRowItemRenderer": {
+                                    "title": { "runs": [{ "text": "Workout Energy" }] },
+                                    "subtitle": {
+                                      "runs": [
+                                        { "text": "Playlist" },
+                                        { "text": " • " },
+                                        { "text": "User Author" },
+                                        { "text": " • " },
+                                        { "text": "30 tracks" }
+                                      ]
+                                    },
+                                    "navigationEndpoint": {
+                                      "browseEndpoint": {
+                                        "browseId": "PLworkout456"
+                                      }
+                                    }
+                                  }
+                                }
+                              ],
+                              "continuations": [{ "nextContinuationData": { "continuation": "cont_token_playlists" } }]
+                            }
+                          }]
+                        }
+                      }
+                    }
+                  }]
+                }
+              }
+            }
+        """.trimIndent()
+
+        val (playlists, continuation) = InnertubeParser.parseLibraryPlaylists(json)
+        assertThat(playlists).hasSize(2)
+        assertThat(playlists[0].playlistId).isEqualTo("VLPLchill123")
+        assertThat(playlists[0].title).isEqualTo("Chill Vibes")
+        assertThat(playlists[0].author).isEqualTo("YouTube Music")
+        assertThat(playlists[0].trackCount).isEqualTo(45)
+        assertThat(playlists[0].thumbnailUri).contains("=w1024-h1024")
+
+        assertThat(playlists[1].playlistId).isEqualTo("PLworkout456")
+        assertThat(playlists[1].title).isEqualTo("Workout Energy")
+        assertThat(playlists[1].author).isEqualTo("User Author")
+        assertThat(playlists[1].trackCount).isEqualTo(30)
+
+        assertThat(continuation).isEqualTo("cont_token_playlists")
+    }
+
+    @Test
+    fun parseLibraryPlaylists_handlesContinuationPayload() {
+        val json = """
+            {
+              "continuationContents": {
+                "gridContinuation": {
+                  "items": [
+                    {
+                      "musicTwoRowItemRenderer": {
+                        "title": { "runs": [{ "text": "Focus Flow" }] },
+                        "subtitle": {
+                          "runs": [
+                            { "text": "Playlist" },
+                            { "text": " • " },
+                            { "text": "Deep Focus" }
+                          ]
+                        },
+                        "navigationEndpoint": {
+                          "browseEndpoint": {
+                            "browseId": "VLPLfocus789"
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "continuations": [
+                    { "nextContinuationData": { "continuation": "next_pl_page_token" } }
+                  ]
+                }
+              }
+            }
+        """.trimIndent()
+
+        val (playlists, continuation) = InnertubeParser.parseLibraryPlaylists(json)
+        assertThat(playlists).hasSize(1)
+        assertThat(playlists[0].playlistId).isEqualTo("VLPLfocus789")
+        assertThat(playlists[0].title).isEqualTo("Focus Flow")
+        assertThat(playlists[0].author).isEqualTo("Deep Focus")
+        assertThat(continuation).isEqualTo("next_pl_page_token")
+    }
+
+    @Test
+    fun parseLibraryPlaylists_handlesMalformedJsonGracefully() {
+        val (playlists1, cont1) = InnertubeParser.parseLibraryPlaylists("{ not valid }")
+        assertThat(playlists1).isEmpty()
+        assertThat(cont1).isNull()
+
+        val (playlists2, cont2) = InnertubeParser.parseLibraryPlaylists("{}")
+        assertThat(playlists2).isEmpty()
+        assertThat(cont2).isNull()
+    }
 }
+
