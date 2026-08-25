@@ -41,7 +41,7 @@ class AdaptiveWeightTuner @Inject constructor() {
             val totalSkips = engagements.sumOf { it.skipBefore30sCount }
             val totalCompletions = engagements.sumOf { it.completionCount }
 
-            val totalInteractions = (totalPlays + totalSkips).coerceAtLeast(1)
+            val totalInteractions = engagements.sumOf { maxOf(it.playCount, it.completionCount + it.skipBefore30sCount) }.coerceAtLeast(1)
             val skipRate = (totalSkips.toDouble() / totalInteractions).coerceIn(0.0, 1.0)
             val completionRate = (totalCompletions.toDouble() / totalInteractions).coerceIn(0.0, 1.0)
 
