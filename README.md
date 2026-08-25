@@ -6,8 +6,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/KDharshana/PixelPlayerOSS/releases/latest">
-    <img src="https://img.shields.io/github/v/release/KDharshana/PixelPlayerOSS?include_prereleases&logo=github&style=for-the-badge&label=Latest%20Release" alt="Latest Release">
+  <a href="https://github.com/dharshan-X/Tonarc/releases/latest">
+    <img src="https://img.shields.io/github/v/release/dharshan-X/Tonarc?include_prereleases&logo=github&style=for-the-badge&label=Latest%20Release" alt="Latest Release">
   </a>
   <a href="https://f-droid.org/packages/com.quietrays.tonarc/">
     <img src="https://img.shields.io/f-droid/v/com.quietrays.tonarc?logo=fdroid&style=for-the-badge&label=F-Droid" alt="F-Droid Version">
@@ -196,8 +196,8 @@ Tonarc/
 
 Clone the repository:
 ```sh
-git clone https://github.com/KDharshana/PixelPlayerOSS.git
-cd PixelPlayerOSS
+git clone https://github.com/dharshan-X/Tonarc.git
+cd Tonarc
 ```
 
 Assemble Debug APK:
@@ -242,8 +242,8 @@ Generate Baseline Profiles (requires connected device or emulator):
 ### Release Channels
 - **F-Droid**: Available in the official F-Droid catalog:
   - Package: `com.quietrays.tonarc`
-- **GitHub Releases**: Download pre-compiled signed APK binaries from the [Releases Page](https://github.com/KDharshana/PixelPlayerOSS/releases).
-- **Obtainium**: Configure Obtainium with the repository URL: `https://github.com/KDharshana/PixelPlayerOSS`.
+- **GitHub Releases**: Download pre-compiled signed APK binaries from the [Releases Page](https://github.com/dharshan-X/Tonarc/releases).
+- **Obtainium**: Configure Obtainium with the repository URL: `https://github.com/dharshan-X/Tonarc`.
 
 ### Architecture Packages
 - **`arm64-v8a`**: Optimized for modern 64-bit ARM Android devices.
