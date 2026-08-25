@@ -148,7 +148,7 @@ class CandidateAggregator @Inject constructor(
     }
 
     private suspend fun collectFavoriteArtistCandidates(favoriteArtists: Set<String>): List<RecommendationCandidate> = coroutineScope {
-        val artistsToFetch = favoriteArtists.take(8)
+        val artistsToFetch = favoriteArtists
         val deferredList = artistsToFetch.map { artist ->
             async {
                 val songs = runCatching { youTubeRepository.searchSongsPaginated(artist).songs }.getOrDefault(emptyList())

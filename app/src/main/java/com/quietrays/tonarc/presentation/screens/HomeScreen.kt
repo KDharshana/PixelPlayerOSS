@@ -577,6 +577,24 @@ fun HomeScreen(
                     }
                 }
 
+                if (filteredKeepListeningSongs.isNotEmpty()) {
+                    item(
+                        key = "keep_listening_section",
+                        contentType = "keep_listening_section"
+                    ) {
+                        HorizontalSongCarouselSection(
+                            title = "Keep Listening",
+                            subtitle = "Pick up where you left off",
+                            songs = filteredKeepListeningSongs,
+                            currentPlayingSongId = currentSong?.id,
+                            isPlaying = isPlaying,
+                            onSongClick = { song ->
+                                playerViewModel.showAndPlaySong(song, filteredKeepListeningSongs, "Keep Listening")
+                            }
+                        )
+                    }
+                }
+
                 if (selectedHomeFilter != HomeFilter.LOCAL_ONLY) {
                     if (quickPicks.isNotEmpty()) {
                         item(
@@ -761,24 +779,6 @@ fun HomeScreen(
                             themeStateHolder = playerViewModel.themeStateHolder,
                             currentSongId = currentSong?.id,
                             contentPadding = PaddingValues(start = 8.dp, end = 24.dp)
-                        )
-                    }
-                }
-
-                if (filteredKeepListeningSongs.isNotEmpty()) {
-                    item(
-                        key = "keep_listening_section",
-                        contentType = "keep_listening_section"
-                    ) {
-                        HorizontalSongCarouselSection(
-                            title = "Keep Listening",
-                            subtitle = "Pick up where you left off",
-                            songs = filteredKeepListeningSongs,
-                            currentPlayingSongId = currentSong?.id,
-                            isPlaying = isPlaying,
-                            onSongClick = { song ->
-                                playerViewModel.showAndPlaySong(song, filteredKeepListeningSongs, "Keep Listening")
-                            }
                         )
                     }
                 }

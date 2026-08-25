@@ -1365,7 +1365,7 @@ class PlayerViewModel @Inject constructor(
                             val favArtists = userPreferencesRepository.favoriteArtistsFlow.first()
                             if (favArtists.isNotEmpty() && (forceRefresh || _favoriteArtistSections.value.isEmpty())) {
                                 val sections = kotlinx.coroutines.coroutineScope {
-                                    favArtists.take(8).map { artistName ->
+                                    favArtists.map { artistName ->
                                         async {
                                             val songs = runCatching {
                                                 youTubeRepository.searchSongsPaginated(artistName).songs.take(20)

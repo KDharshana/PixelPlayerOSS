@@ -96,7 +96,7 @@ class DailyMixStateHolder @Inject constructor(
             // Fetch top songs from user's favorite artists on YouTube Music
             val favoriteArtistNames = runCatching { userPreferencesRepository.favoriteArtistsFlow.first() }.getOrDefault(emptySet())
             val favArtistSongs = if (favoriteArtistNames.isNotEmpty()) {
-                favoriteArtistNames.take(4).flatMap { artistName ->
+                favoriteArtistNames.flatMap { artistName ->
                     runCatching { youTubeRepository.searchSongsPaginated(artistName).songs.take(10) }.getOrDefault(emptyList())
                 }
             } else emptyList()
