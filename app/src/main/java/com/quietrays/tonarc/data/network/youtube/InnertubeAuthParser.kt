@@ -1,5 +1,7 @@
 package com.quietrays.tonarc.data.network.youtube
 
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import org.json.JSONObject
 
 data class ParsedInnertubeAuth(
@@ -16,6 +18,7 @@ object InnertubeAuthParser {
     /**
      * Parses raw user input containing Innertube authentication data.
      * Supports:
+     * - Tagged block exports (e.g. `***INNERTUBE COOKIE*** = ...`, `***VISITOR DATA*** = ...`)
      * - Raw cookie strings ("SAPISID=...; __Secure-3PAPISID=...")
      * - "Cookie: ..." header strings
      * - Multi-line HTTP header dumps from browser DevTools
@@ -33,8 +36,34 @@ object InnertubeAuthParser {
         var extractedCookies: String? = null
         var extractedVisitorData: String? = null
 
+        // 0. Tagged block exports (e.g. ***INNERTUBE COOKIE*** = ..., ***VISITOR DATA*** = ...)
+        val taggedPattern = Regex("""^\s*\*{1,3}([^=*\n]+)\*{1,3}\s*=\s*(.*)$""")
+        val taggedMap = mutableMapOf<String, String>()
+        for (line in trimmed.lines()) {
+            val match = taggedPattern.find(line.trim())
+            if (match != null) {
+                val key = match.groupValues[1].trim().lowercase()
+                val value = match.groupValues[2].trim()
+                if (value.isNotEmpty()) {
+                    taggedMap[key] = value
+                }
+            }
+        }
+
+        if (taggedMap.isNotEmpty()) {
+            extractedCookies = taggedMap["innertube cookie"]
+                ?: taggedMap["innertube_cookie"]
+                ?: taggedMap["cookie"]
+                ?: taggedMap["cookies"]
+
+            extractedVisitorData = taggedMap["visitor data"]
+                ?: taggedMap["visitor_data"]
+                ?: taggedMap["visitordata"]
+                ?: taggedMap["visitor"]
+        }
+
         // 1. JSON parsing
-        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        if (extractedCookies == null && trimmed.startsWith("{") && trimmed.endsWith("}")) {
             runCatching {
                 val json = JSONObject(trimmed)
                 if (json.has("cookie")) extractedCookies = json.optString("cookie")
@@ -149,8 +178,18 @@ object InnertubeAuthParser {
             }
         }
 
+        val decodedVisitorData = extractedVisitorData?.let { rawVisitor ->
+            runCatching {
+                if (rawVisitor.contains("%")) {
+                    URLDecoder.decode(rawVisitor, StandardCharsets.UTF_8.name())
+                } else {
+                    rawVisitor
+                }
+            }.getOrDefault(rawVisitor)
+        }
+
         val normalizedCookies = extractedCookies?.let { normalizeCookies(it) }?.takeIf { it.isNotBlank() }
-        val finalVisitorData = extractedVisitorData?.trim()?.takeIf { it.isNotBlank() }
+        val finalVisitorData = decodedVisitorData?.trim()?.takeIf { it.isNotBlank() }
 
         val sapisid = normalizedCookies?.let { cookies ->
             extractCookieValue(cookies, "SAPISID")

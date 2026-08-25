@@ -107,4 +107,25 @@ class InnertubeAuthParserTest {
         assertTrue(parsed.isValid)
         assertEquals("Cgt_only_visitor_token_12345", parsed.visitorData)
     }
+
+    @Test
+    fun `parse tagged INNERTUBE COOKIE and VISITOR DATA format`() {
+        val input = """
+            ***INNERTUBE COOKIE*** =__Secure-1PSIDTS=sidts-123; HSID=Av582; SAPISID=HUXEMsqUNCiUDLz6/A6X9Dej6nkrabBkwt; __Secure-3PAPISID=HUXEMsqUNCiUDLz6/A6X9Dej6nkrabBkwt; VISITOR_INFO1_LIVE=PCkTUP7lGTI;
+            ***VISITOR DATA*** =CgtQQ2tUVVA3bEdUSSj24_jOBjIKCgJJThIEGgAgJGLfAgrcAjE3LllUPVM5bXpXTllfdjQtZlZRd3hnbWdlSXZrdXlYU19rRXpYZ2Y1UVhyZHR4MDJuM0REZjBSYTg4UFNTLTVSc1RjaGR3eEx1QWRySnpvTTRsVldrOWVaSkNVVXltZnh4SHFmamhrcEpVYWhHc3ZKM0g0Vl9kZlhXUGFvTWJrUGd0SXRwM0g4N0RuQTVGX0NnTEZnU1VyZkdyZG1mMUxjbnBFcEJVeGRScjJqd1c3M2swZzJBZDZPTnd1R04wMGxuSXA4bXNwVkN0RGl5emxLVEx0OFQwRm5RQ0dVTEwwc2w5RVM0Q3JyV1BGZUVPNzZURGRmOHM0azBCcThONF9taU5zUU9OQVN6di1WcDNkSy1pMjdPbWZPVllJR2hEZlFIRFNod3NGYjZrWEx1X0t0TXkwa01nM2hhZGM3VnFodzhILThuOHBpeWFCbG9xM1cxTlEzWC1ZSVZkQQ%3D%3D
+            ***DATASYNC ID*** =105811609989903499132
+            ***ACCOUNT NAME*** =
+            ***ACCOUNT EMAIL*** =
+            ***ACCOUNT CHANNEL HANDLE*** =
+        """.trimIndent()
+
+        val parsed = InnertubeAuthParser.parse(input)
+        assertTrue(parsed.isValid)
+        assertEquals("HUXEMsqUNCiUDLz6/A6X9Dej6nkrabBkwt", parsed.sapisid)
+        assertTrue(parsed.cookies.contains("SAPISID=HUXEMsqUNCiUDLz6/A6X9Dej6nkrabBkwt"))
+        assertTrue(parsed.cookies.contains("__Secure-1PSIDTS=sidts-123"))
+        assertNotNull(parsed.visitorData)
+        assertTrue(parsed.visitorData.startsWith("CgtQQ2tUVVA3bEdUSS"))
+        assertTrue(parsed.visitorData.endsWith("==")) // URL decoded %3D%3D -> ==
+    }
 }
