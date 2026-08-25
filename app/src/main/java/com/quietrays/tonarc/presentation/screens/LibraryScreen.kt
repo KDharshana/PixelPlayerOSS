@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.CloudDownload
+import androidx.compose.material.icons.rounded.CloudQueue
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.SelectAll
@@ -469,22 +470,27 @@ fun LibraryScreen(
             showSongInfoBottomSheet = true
         }
     }
+    val youtubeSyncState by playlistViewModel.youtubeSyncState.collectAsStateWithLifecycle()
+    val isYouTubeSyncing = youtubeSyncState is com.quietrays.tonarc.data.network.youtube.SyncState.Syncing
+
     var isMinDelayActive by remember { mutableStateOf(false) }
     var refreshGeneration by remember { mutableStateOf(0) }
 
-    val onRefresh: () -> Unit = remember(scope, syncManager) {
+    val onRefresh: () -> Unit = remember(scope, syncManager, playlistViewModel) {
         {
             val currentRefreshGeneration = refreshGeneration + 1
             refreshGeneration = currentRefreshGeneration
             isMinDelayActive = true
             isRefreshing = true
             syncManager.incrementalSync()
+            playlistViewModel.syncYouTubeLibrary(force = true)
             scope.launch {
                 kotlinx.coroutines.delay(PULL_REFRESH_MIN_VISIBLE_MS)
                 if (currentRefreshGeneration != refreshGeneration) return@launch
                 isMinDelayActive = false
                 val stillFetching = syncManager.isFetchingChanges.first()
-                if (!stillFetching) {
+                val ytSyncing = playlistViewModel.youtubeSyncState.first() is com.quietrays.tonarc.data.network.youtube.SyncState.Syncing
+                if (!stillFetching && !ytSyncing) {
                     isRefreshing = false
                     return@launch
                 }
@@ -501,8 +507,8 @@ fun LibraryScreen(
         }
     }
 
-    LaunchedEffect(isFetchingChanges) {
-        if (!isFetchingChanges && !isMinDelayActive) {
+    LaunchedEffect(isFetchingChanges, isYouTubeSyncing) {
+        if (!isFetchingChanges && !isYouTubeSyncing && !isMinDelayActive) {
             isRefreshing = false
         }
     }
@@ -1056,6 +1062,10 @@ fun LibraryScreen(
                             syncManager = syncManager
                         )
 
+                        YouTubeInlineSyncIndicator(
+                            syncState = youtubeSyncState
+                        )
+
                         if (isSortSheetVisible && sanitizedSortOptions.isNotEmpty()) {
                             val currentSelectionKey = currentSelectedSortOption?.storageKey
                             val selectedOptionForSheet = sanitizedSortOptions.firstOrNull { option ->
@@ -1298,8 +1308,11 @@ fun LibraryScreen(
                                             navController = navController,
                                             playerViewModel = playerViewModel,
                                             bottomBarHeight = bottomBarHeightDp,
-                                            isRefreshing = isRefreshing,
-                                            onRefresh = onRefresh,
+                                            isRefreshing = isRefreshing || isYouTubeSyncing,
+                                            onRefresh = {
+                                                onRefresh()
+                                                playlistViewModel.syncYouTubeLibrary(force = true)
+                                            },
                                             isSelectionMode = isPlaylistSelectionMode,
                                             selectedPlaylistIds = selectedPlaylistIds,
                                             onPlaylistLongPress = onPlaylistLongPress,
@@ -1933,6 +1946,71 @@ private fun LibraryInlineSyncIndicator(
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
             )
+        }
+    }
+}
+
+@Composable
+private fun YouTubeInlineSyncIndicator(
+    syncState: com.quietrays.tonarc.data.network.youtube.SyncState
+) {
+    val isSyncing = syncState is com.quietrays.tonarc.data.network.youtube.SyncState.Syncing
+    AnimatedVisibility(
+        visible = isSyncing,
+        enter = androidx.compose.animation.expandVertically(
+            expandFrom = Alignment.Top,
+            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+        ) + androidx.compose.animation.fadeIn(animationSpec = tween(180)),
+        exit = androidx.compose.animation.shrinkVertically(
+            shrinkTowards = Alignment.Top,
+            animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
+        ) + androidx.compose.animation.fadeOut(animationSpec = tween(160))
+    ) {
+        val syncingState = syncState as? com.quietrays.tonarc.data.network.youtube.SyncState.Syncing
+        val message = syncingState?.message ?: stringResource(R.string.sync_in_progress)
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.CloudQueue,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            if (syncingState != null && syncingState.progress > 0f) {
+                LinearWavyProgressIndicator(
+                    progress = { syncingState.progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+            } else {
+                LinearWavyProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+            }
         }
     }
 }

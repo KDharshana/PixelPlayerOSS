@@ -18,6 +18,11 @@ import com.quietrays.tonarc.data.playlist.NlpPlaylistGenerator
 import com.quietrays.tonarc.data.playlist.SmartPlaylistBuilder
 import com.quietrays.tonarc.data.preferences.PlaylistPreferencesRepository
 import com.quietrays.tonarc.data.repository.MusicRepository
+import com.quietrays.tonarc.data.database.YouTubeDao
+import com.quietrays.tonarc.data.database.YouTubePlaylistEntity
+import com.quietrays.tonarc.data.database.YouTubeSongEntity
+import com.quietrays.tonarc.data.network.youtube.SyncState
+import com.quietrays.tonarc.data.network.youtube.YouTubeLibrarySyncEngine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +30,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -85,8 +91,18 @@ class PlaylistViewModel @Inject constructor(
     private val nlpPlaylistGenerator: NlpPlaylistGenerator,
     private val cloudOfflineRepository: com.quietrays.tonarc.data.offline.CloudOfflineRepository,
     private val youTubeRepository: com.quietrays.tonarc.data.youtube.YouTubeRepository,
+    private val youTubeLibrarySyncEngine: YouTubeLibrarySyncEngine,
+    private val youTubeDao: YouTubeDao,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    val youtubeSyncState: StateFlow<SyncState> = youTubeLibrarySyncEngine.syncState
+
+    fun syncYouTubeLibrary(force: Boolean = true) {
+        viewModelScope.launch {
+            youTubeLibrarySyncEngine.syncLibrary(force)
+        }
+    }
 
     fun downloadPlaylist(songs: List<Song>) {
         if (songs.isEmpty()) {
@@ -162,10 +178,26 @@ class PlaylistViewModel @Inject constructor(
             val initialSortOption = resolvePlaylistSortOption(initialSortOptionName)
             _uiState.update { it.copy(currentPlaylistSortOption = initialSortOption) }
 
-            playlistPreferencesRepository.userPlaylistsFlow.collect { playlists ->
-                val currentSortOption =
-                    _uiState.value.currentPlaylistSortOption
-                val sortedPlaylists = sortPlaylistsList(playlists, currentSortOption)
+            combine(
+                playlistPreferencesRepository.userPlaylistsFlow,
+                youTubeRepository.playlistsFlow
+            ) { localPlaylists, ytPlaylists ->
+                val ytMapped = ytPlaylists.map { ytEntity ->
+                    Playlist(
+                        id = ytEntity.id,
+                        name = ytEntity.name,
+                        songIds = if (ytEntity.songCount > 0) List(ytEntity.songCount) { "yt_track_$it" } else emptyList(),
+                        createdAt = ytEntity.dateAdded,
+                        lastModified = ytEntity.dateModified,
+                        coverImageUri = ytEntity.thumbnailUrl,
+                        coverIconName = if (ytEntity.id == "ytm_liked_music") "Favorite" else null,
+                        source = "YOUTUBE"
+                    )
+                }
+                val allPlaylists = localPlaylists + ytMapped
+                val currentSortOption = _uiState.value.currentPlaylistSortOption
+                sortPlaylistsList(allPlaylists, currentSortOption)
+            }.collect { sortedPlaylists ->
                 _uiState.update { it.copy(playlists = sortedPlaylists.toImmutableList()) }
             }
         }
@@ -235,16 +267,51 @@ class PlaylistViewModel @Inject constructor(
                             )
                         }
                     }
+                } else if (playlistId == "ytm_liked_music") {
+                    val ytPlaylistEntity = youTubeDao.getPlaylistById("ytm_liked_music")
+                    val likedEntities = youTubeDao.getSongsByPlaylist("__liked_music__").first()
+                    val likedSongs = likedEntities.map { it.toSong() }
+                    val playlistDetails = Playlist(
+                        id = "ytm_liked_music",
+                        name = ytPlaylistEntity?.name ?: "Liked Music",
+                        songIds = likedSongs.map { it.id },
+                        createdAt = ytPlaylistEntity?.dateAdded ?: System.currentTimeMillis(),
+                        lastModified = ytPlaylistEntity?.dateModified ?: System.currentTimeMillis(),
+                        coverImageUri = ytPlaylistEntity?.thumbnailUrl ?: likedSongs.firstOrNull()?.albumArtUriString,
+                        coverIconName = "Favorite",
+                        source = "YOUTUBE"
+                    )
+
+                    val orderMode = _uiState.value.playlistOrderModes[playlistId] ?: PlaylistSongsOrderMode.Manual
+                    val orderedSongs = when (orderMode) {
+                        is PlaylistSongsOrderMode.Sorted -> withContext(Dispatchers.Default) {
+                            applySortToSongs(likedSongs, orderMode.option)
+                        }
+                        PlaylistSongsOrderMode.Manual -> likedSongs
+                    }
+
+                    _uiState.update {
+                        it.copy(
+                            currentPlaylistDetails = playlistDetails,
+                            currentPlaylistSongs = orderedSongs,
+                            currentPlaylistSongsSortOption = (orderMode as? PlaylistSongsOrderMode.Sorted)?.option
+                                ?: it.currentPlaylistSongsSortOption,
+                            playlistSongsOrderMode = orderMode,
+                            playlistOrderModes = it.playlistOrderModes + (playlistId to orderMode),
+                            isLoading = false,
+                            playlistNotFound = false
+                        )
+                    }
                 } else {
-                    val playlist = playlistPreferencesRepository.userPlaylistsFlow.first()
+                    val localPlaylist = playlistPreferencesRepository.userPlaylistsFlow.first()
                         .find { it.id == playlistId }
 
-                    if (playlist != null) {
-                        val playlistForDisplay = refreshSmartPlaylistIfNeeded(playlist)
+                    if (localPlaylist != null) {
+                        val playlistForDisplay = refreshSmartPlaylistIfNeeded(localPlaylist)
                         val orderMode = _uiState.value.playlistOrderModes[playlistId]
                             ?: PlaylistSongsOrderMode.Manual
 
-                        val songsList: List<Song> = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val songsList: List<Song> = withContext(Dispatchers.IO) {
                             musicRepository.getSongsByIds(playlistForDisplay.songIds).first()
                         }
 
@@ -268,28 +335,125 @@ class PlaylistViewModel @Inject constructor(
                             )
                         }
                     } else {
-                        val onlineResult = withContext(Dispatchers.IO) {
-                            youTubeRepository.getPlaylist(playlistId)
-                        }
-                        if (onlineResult != null) {
-                            val (onlinePlaylist, onlineSongs) = onlineResult
+                        val ytPlaylistEntity = youTubeDao.getPlaylistById(playlistId)
+                        val cachedSongs = youTubeDao.getSongsByPlaylist(playlistId).first()
+
+                        if (cachedSongs.isNotEmpty()) {
+                            val domainSongs = cachedSongs.map { it.toSong() }
+                            val playlistDetails = Playlist(
+                                id = playlistId,
+                                name = ytPlaylistEntity?.name ?: "YouTube Playlist",
+                                songIds = domainSongs.map { it.id },
+                                createdAt = ytPlaylistEntity?.dateAdded ?: System.currentTimeMillis(),
+                                lastModified = ytPlaylistEntity?.dateModified ?: System.currentTimeMillis(),
+                                coverImageUri = ytPlaylistEntity?.thumbnailUrl ?: domainSongs.firstOrNull()?.albumArtUriString,
+                                source = "YOUTUBE"
+                            )
+                            val orderMode = _uiState.value.playlistOrderModes[playlistId] ?: PlaylistSongsOrderMode.Manual
+                            val orderedSongs = when (orderMode) {
+                                is PlaylistSongsOrderMode.Sorted -> withContext(Dispatchers.Default) {
+                                    applySortToSongs(domainSongs, orderMode.option)
+                                }
+                                PlaylistSongsOrderMode.Manual -> domainSongs
+                            }
                             _uiState.update {
                                 it.copy(
-                                    currentPlaylistDetails = onlinePlaylist,
-                                    currentPlaylistSongs = onlineSongs,
+                                    currentPlaylistDetails = playlistDetails,
+                                    currentPlaylistSongs = orderedSongs,
+                                    currentPlaylistSongsSortOption = (orderMode as? PlaylistSongsOrderMode.Sorted)?.option
+                                        ?: it.currentPlaylistSongsSortOption,
+                                    playlistSongsOrderMode = orderMode,
+                                    playlistOrderModes = it.playlistOrderModes + (playlistId to orderMode),
                                     isLoading = false,
                                     playlistNotFound = false
                                 )
                             }
                         } else {
-                            Timber.tag("PlaylistVM").w("Playlist with id $playlistId not found.")
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    playlistNotFound = true,
-                                    currentPlaylistDetails = null,
-                                    currentPlaylistSongs = emptyList()
+                            val onlineResult = withContext(Dispatchers.IO) {
+                                youTubeRepository.getPlaylist(playlistId)
+                            }
+                            if (onlineResult != null) {
+                                val (onlinePlaylist, onlineSongs) = onlineResult
+                                val now = System.currentTimeMillis()
+                                val songEntities = onlineSongs.map { s ->
+                                    val vid = s.youtubeId ?: s.id.removePrefix("youtube_")
+                                    YouTubeSongEntity(
+                                        id = s.id,
+                                        videoId = vid,
+                                        playlistId = playlistId,
+                                        title = s.title,
+                                        artist = s.artist,
+                                        album = s.album,
+                                        duration = s.duration,
+                                        thumbnailUrl = s.albumArtUriString,
+                                        year = s.year,
+                                        dateAdded = now
+                                    )
+                                }
+                                withContext(Dispatchers.IO) {
+                                    youTubeDao.deleteSongsByPlaylist(playlistId)
+                                    youTubeDao.insertSongs(songEntities)
+                                    if (ytPlaylistEntity == null) {
+                                        youTubeDao.insertPlaylist(
+                                            YouTubePlaylistEntity(
+                                                id = playlistId,
+                                                name = onlinePlaylist.name,
+                                                songCount = onlineSongs.size,
+                                                thumbnailUrl = onlinePlaylist.coverImageUri,
+                                                dateAdded = now,
+                                                dateModified = now
+                                            )
+                                        )
+                                    }
+                                }
+
+                                val orderMode = _uiState.value.playlistOrderModes[playlistId] ?: PlaylistSongsOrderMode.Manual
+                                val orderedSongs = when (orderMode) {
+                                    is PlaylistSongsOrderMode.Sorted -> withContext(Dispatchers.Default) {
+                                        applySortToSongs(onlineSongs, orderMode.option)
+                                    }
+                                    PlaylistSongsOrderMode.Manual -> onlineSongs
+                                }
+                                _uiState.update {
+                                    it.copy(
+                                        currentPlaylistDetails = onlinePlaylist,
+                                        currentPlaylistSongs = orderedSongs,
+                                        currentPlaylistSongsSortOption = (orderMode as? PlaylistSongsOrderMode.Sorted)?.option
+                                            ?: it.currentPlaylistSongsSortOption,
+                                        playlistSongsOrderMode = orderMode,
+                                        playlistOrderModes = it.playlistOrderModes + (playlistId to orderMode),
+                                        isLoading = false,
+                                        playlistNotFound = false
+                                    )
+                                }
+                            } else if (ytPlaylistEntity != null) {
+                                val emptyPlaylist = Playlist(
+                                    id = playlistId,
+                                    name = ytPlaylistEntity.name,
+                                    songIds = emptyList(),
+                                    createdAt = ytPlaylistEntity.dateAdded,
+                                    lastModified = ytPlaylistEntity.dateModified,
+                                    coverImageUri = ytPlaylistEntity.thumbnailUrl,
+                                    source = "YOUTUBE"
                                 )
+                                _uiState.update {
+                                    it.copy(
+                                        currentPlaylistDetails = emptyPlaylist,
+                                        currentPlaylistSongs = emptyList(),
+                                        isLoading = false,
+                                        playlistNotFound = false
+                                    )
+                                }
+                            } else {
+                                Timber.tag("PlaylistVM").w("Playlist with id $playlistId not found.")
+                                _uiState.update {
+                                    it.copy(
+                                        isLoading = false,
+                                        playlistNotFound = true,
+                                        currentPlaylistDetails = null,
+                                        currentPlaylistSongs = emptyList()
+                                    )
+                                }
                             }
                         }
                     }
@@ -508,7 +672,14 @@ class PlaylistViewModel @Inject constructor(
     fun deletePlaylist(playlistId: String) {
         if (isFolderPlaylistId(playlistId)) return
         viewModelScope.launch {
-            playlistPreferencesRepository.deletePlaylist(playlistId)
+            if (playlistId == "ytm_liked_music" || playlistId.startsWith("PL") || playlistId.startsWith("RD") || youTubeDao.getPlaylistById(playlistId) != null) {
+                withContext(Dispatchers.IO) {
+                    youTubeDao.deletePlaylist(playlistId)
+                    youTubeDao.deleteSongsByPlaylist(if (playlistId == "ytm_liked_music") "__liked_music__" else playlistId)
+                }
+            } else {
+                playlistPreferencesRepository.deletePlaylist(playlistId)
+            }
         }
     }
 
@@ -813,33 +984,35 @@ class PlaylistViewModel @Inject constructor(
         playlists: List<com.quietrays.tonarc.data.model.Playlist>,
         sortOption: SortOption
     ): List<com.quietrays.tonarc.data.model.Playlist> {
-        return when (sortOption) {
-            SortOption.PlaylistNameAZ -> playlists.sortedWith(
+        val (pinned, unpinned) = playlists.partition { it.id == "ytm_liked_music" }
+        val sortedUnpinned = when (sortOption) {
+            SortOption.PlaylistNameAZ -> unpinned.sortedWith(
                 compareBy<com.quietrays.tonarc.data.model.Playlist> { it.name.lowercase() }
                     .thenByDescending { it.lastModified }
                     .thenBy { it.id }
             )
-            SortOption.PlaylistNameZA -> playlists.sortedWith(
+            SortOption.PlaylistNameZA -> unpinned.sortedWith(
                 compareByDescending<com.quietrays.tonarc.data.model.Playlist> { it.name.lowercase() }
                     .thenByDescending { it.lastModified }
                     .thenBy { it.id }
             )
-            SortOption.PlaylistDateCreated -> playlists.sortedWith(
+            SortOption.PlaylistDateCreated -> unpinned.sortedWith(
                 compareByDescending<com.quietrays.tonarc.data.model.Playlist> { it.lastModified }
                     .thenBy { it.name.lowercase() }
                     .thenBy { it.id }
             )
-            SortOption.PlaylistDateCreatedAsc -> playlists.sortedWith(
+            SortOption.PlaylistDateCreatedAsc -> unpinned.sortedWith(
                 compareBy<com.quietrays.tonarc.data.model.Playlist> { it.lastModified }
                     .thenBy { it.name.lowercase() }
                     .thenBy { it.id }
             )
-            else -> playlists.sortedWith(
+            else -> unpinned.sortedWith(
                 compareBy<com.quietrays.tonarc.data.model.Playlist> { it.name.lowercase() }
                     .thenByDescending { it.lastModified }
                     .thenBy { it.id }
             )
         }
+        return pinned + sortedUnpinned
     }
 
     private fun sortSongsList(
@@ -917,7 +1090,14 @@ class PlaylistViewModel @Inject constructor(
         viewModelScope.launch {
             playlistIds.forEach { playlistId ->
                 if (!isFolderPlaylistId(playlistId)) {
-                    playlistPreferencesRepository.deletePlaylist(playlistId)
+                    if (playlistId == "ytm_liked_music" || playlistId.startsWith("PL") || playlistId.startsWith("RD") || youTubeDao.getPlaylistById(playlistId) != null) {
+                        withContext(Dispatchers.IO) {
+                            youTubeDao.deletePlaylist(playlistId)
+                            youTubeDao.deleteSongsByPlaylist(if (playlistId == "ytm_liked_music") "__liked_music__" else playlistId)
+                        }
+                    } else {
+                        playlistPreferencesRepository.deletePlaylist(playlistId)
+                    }
                 }
             }
         }

@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.CloudQueue
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.LibraryMusic
@@ -359,6 +361,8 @@ fun PlaylistItem(
             .map<List<Song>, List<Song>?> { it }
     }.collectAsStateWithLifecycle(initialValue = playlistSongsInitialValue)
 
+    val isLikedMusicHero = playlist.id == "ytm_liked_music"
+
     val selectionScale by animateFloatAsState(
         targetValue = if (isSelected) 0.98f else 1f,
         animationSpec = spring(
@@ -378,6 +382,7 @@ fun PlaylistItem(
         targetValue = when {
             isAddingToPlaylist -> MaterialTheme.colorScheme.surfaceContainerHigh
             isSelected -> MaterialTheme.colorScheme.secondaryContainer
+            isLikedMusicHero -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
             else -> MaterialTheme.colorScheme.surfaceContainerLow
         },
         animationSpec = tween(durationMillis = 300),
@@ -426,7 +431,7 @@ fun PlaylistItem(
             PlaylistCover(
                 playlist = playlist,
                 playlistSongs = remember(playlistSongs) { (playlistSongs ?: emptyList()).toImmutableList() },
-                size = 48.dp
+                size = if (isLikedMusicHero) 52.dp else 48.dp
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -436,6 +441,15 @@ fun PlaylistItem(
                     modifier = Modifier.padding(end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (isLikedMusicHero) {
+                        Icon(
+                            imageVector = Icons.Rounded.Favorite,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
                     Text(
                         text = playlist.name,
                         style = MaterialTheme.typography.titleMedium.copy(fontFamily = RoundedSans),
@@ -452,6 +466,30 @@ fun PlaylistItem(
                             tint = Color.Unspecified,
                             modifier = Modifier.size(18.dp)
                         )
+                    } else if (playlist.source == "YOUTUBE") {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CloudQueue,
+                                    contentDescription = "YouTube Music",
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "YouTube",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                 }
                 Text(
@@ -490,7 +528,7 @@ fun PlaylistItem(
                 }
             }
 
-            if (isAddingToPlaylist && selectedPlaylists != null) {
+            if (isAddingToPlaylist && selectedPlaylists != null && playlist.source != "YOUTUBE") {
                 Spacer(modifier = Modifier.width(8.dp))
                 Checkbox(
                     checked = selectedPlaylists[playlist.id] ?: false,
