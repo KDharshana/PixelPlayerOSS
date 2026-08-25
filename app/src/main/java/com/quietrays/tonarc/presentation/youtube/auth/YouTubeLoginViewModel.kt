@@ -3,6 +3,7 @@ package com.quietrays.tonarc.presentation.youtube.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.quietrays.tonarc.data.network.youtube.InnertubeApiService
+import com.quietrays.tonarc.data.network.youtube.InnertubeAuthParser
 import com.quietrays.tonarc.data.preferences.UserPreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,10 +34,14 @@ class YouTubeLoginViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = YouTubeLoginUiState.LoggingIn
             try {
-                // Apply cookies to api service
-                innertubeApiService.authCookies = cookies
-                // Save cookies in preferences
-                userPreferencesRepository.setYouTubeAuthCookies(cookies)
+                val parsed = InnertubeAuthParser.parse(cookies)
+                val finalCookies = parsed.cookies ?: cookies
+                innertubeApiService.authCookies = finalCookies
+                userPreferencesRepository.setYouTubeAuthCookies(finalCookies)
+                parsed.visitorData?.let { vData ->
+                    innertubeApiService.visitorData = vData
+                    userPreferencesRepository.setYouTubeVisitorData(vData)
+                }
                 _uiState.value = YouTubeLoginUiState.Success("YouTube Music Connected")
             } catch (e: Exception) {
                 Timber.e(e, "Failed to save YouTube auth cookies")
@@ -45,10 +50,44 @@ class YouTubeLoginViewModel @Inject constructor(
         }
     }
 
+    fun onTokenOrCookiesPasted(rawInput: String) {
+        val parsed = InnertubeAuthParser.parse(rawInput)
+        if (!parsed.isValid) {
+            _uiState.value = YouTubeLoginUiState.Error("Invalid token or cookie format. Please paste a valid SAPISID token, Cookie header, or cURL request.")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = YouTubeLoginUiState.LoggingIn
+            try {
+                if (!parsed.cookies.isNullOrBlank()) {
+                    innertubeApiService.authCookies = parsed.cookies
+                    userPreferencesRepository.setYouTubeAuthCookies(parsed.cookies)
+                }
+                if (!parsed.visitorData.isNullOrBlank()) {
+                    innertubeApiService.visitorData = parsed.visitorData
+                    userPreferencesRepository.setYouTubeVisitorData(parsed.visitorData)
+                }
+                _uiState.value = YouTubeLoginUiState.Success("YouTube Music Connected")
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to apply pasted YouTube auth token")
+                _uiState.value = YouTubeLoginUiState.Error(e.message ?: "Authentication failed")
+            }
+        }
+    }
+
+    fun clearError() {
+        if (_uiState.value is YouTubeLoginUiState.Error) {
+            _uiState.value = YouTubeLoginUiState.Idle
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             innertubeApiService.authCookies = null
+            innertubeApiService.visitorData = null
             userPreferencesRepository.setYouTubeAuthCookies(null)
+            userPreferencesRepository.setYouTubeVisitorData(null)
             _uiState.value = YouTubeLoginUiState.Idle
         }
     }

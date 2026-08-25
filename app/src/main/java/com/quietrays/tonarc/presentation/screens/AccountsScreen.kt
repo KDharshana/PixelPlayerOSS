@@ -42,6 +42,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CloudQueue
+import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.AlertDialog
@@ -123,6 +124,8 @@ fun AccountsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listenBrainzConnectState by viewModel.listenBrainzConnectState.collectAsStateWithLifecycle()
     var showListenBrainzDialog by remember { mutableStateOf(false) }
+    var showYouTubeConnectChoiceDialog by remember { mutableStateOf(false) }
+    var showYouTubeTokenDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(listenBrainzConnectState) {
         if (listenBrainzConnectState == ListenBrainzConnectState.Success) {
@@ -196,17 +199,23 @@ fun AccountsScreen(
     }
 
     val onConnectService: (ExternalServiceAccount) -> Unit = { service ->
-        if (service == ExternalServiceAccount.LISTENBRAINZ) {
-            showListenBrainzDialog = true
-        } else {
-            openService(
-                context = context,
-                service = service,
-                onOpenNavidromeDashboard = onOpenNavidromeDashboard,
-                onOpenJellyfinDashboard = onOpenJellyfinDashboard,
-                onOpenYouTubeDashboard = onOpenYouTubeDashboard,
-                preferDashboard = false
-            )
+        when (service) {
+            ExternalServiceAccount.LISTENBRAINZ -> {
+                showListenBrainzDialog = true
+            }
+            ExternalServiceAccount.YOUTUBE_MUSIC -> {
+                showYouTubeConnectChoiceDialog = true
+            }
+            else -> {
+                openService(
+                    context = context,
+                    service = service,
+                    onOpenNavidromeDashboard = onOpenNavidromeDashboard,
+                    onOpenJellyfinDashboard = onOpenJellyfinDashboard,
+                    onOpenYouTubeDashboard = onOpenYouTubeDashboard,
+                    preferDashboard = false
+                )
+            }
         }
     }
 
@@ -231,7 +240,7 @@ fun AccountsScreen(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 }
 
@@ -257,19 +266,39 @@ fun AccountsScreen(
                         } else if (account.service == ExternalServiceAccount.NAVIDROME) {
                             painterResource(R.drawable.ic_navidrome_md3)
                         } else null,
-                        extraContent = if (account.service == ExternalServiceAccount.LISTENBRAINZ) {
-                            {
-                                uiState.listenBrainz?.let { listenBrainz ->
-                                    ListenBrainzCardExtras(
-                                        model = listenBrainz,
-                                        onToggleLocal = viewModel::setListenBrainzScrobbleLocal,
-                                        onToggleNavidrome = viewModel::setListenBrainzScrobbleNavidrome,
-                                        onToggleJellyfin = viewModel::setListenBrainzScrobbleJellyfin,
-                                        onReconnect = { showListenBrainzDialog = true }
-                                    )
+                        extraContent = when (account.service) {
+                            ExternalServiceAccount.LISTENBRAINZ -> {
+                                {
+                                    uiState.listenBrainz?.let { listenBrainz ->
+                                        ListenBrainzCardExtras(
+                                            model = listenBrainz,
+                                            onToggleLocal = viewModel::setListenBrainzScrobbleLocal,
+                                            onToggleNavidrome = viewModel::setListenBrainzScrobbleNavidrome,
+                                            onToggleJellyfin = viewModel::setListenBrainzScrobbleJellyfin,
+                                            onReconnect = { showListenBrainzDialog = true }
+                                        )
+                                    }
                                 }
                             }
-                        } else null
+                            ExternalServiceAccount.YOUTUBE_MUSIC -> {
+                                {
+                                    OutlinedButton(
+                                        onClick = { showYouTubeTokenDialog = true },
+                                        shape = AbsoluteSmoothCornerShape(18.dp, 60),
+                                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.ContentPaste,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(stringResource(R.string.accounts_youtube_update_token))
+                                    }
+                                }
+                            }
+                            else -> null
+                        }
                     )
                 }
 
@@ -317,6 +346,65 @@ fun AccountsScreen(
                 onDismiss = {
                     showListenBrainzDialog = false
                     viewModel.resetListenBrainzConnectState()
+                }
+            )
+        }
+
+        if (showYouTubeConnectChoiceDialog) {
+            AlertDialog(
+                onDismissRequest = { showYouTubeConnectChoiceDialog = false },
+                title = { Text(stringResource(R.string.accounts_youtube_connect_choice_title)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = stringResource(R.string.accounts_youtube_connect_choice_body),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        FilledTonalButton(
+                            onClick = {
+                                showYouTubeConnectChoiceDialog = false
+                                safeStartActivity(
+                                    context = context,
+                                    intent = Intent(context, com.quietrays.tonarc.presentation.youtube.auth.YouTubeLoginActivity::class.java)
+                                )
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.accounts_youtube_connect_browser))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                showYouTubeConnectChoiceDialog = false
+                                showYouTubeTokenDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Rounded.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(stringResource(R.string.accounts_youtube_connect_token))
+                        }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(onClick = { showYouTubeConnectChoiceDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            )
+        }
+
+        if (showYouTubeTokenDialog) {
+            com.quietrays.tonarc.presentation.youtube.auth.YouTubeTokenInputDialog(
+                onDismiss = { showYouTubeTokenDialog = false },
+                onSubmit = { tokenInput ->
+                    val success = viewModel.connectYouTubeMusic(tokenInput)
+                    if (success) {
+                        Toast.makeText(context, context.getString(R.string.accounts_youtube_token_success), Toast.LENGTH_SHORT).show()
+                        showYouTubeTokenDialog = false
+                    } else {
+                        Toast.makeText(context, context.getString(R.string.accounts_youtube_token_invalid), Toast.LENGTH_SHORT).show()
+                    }
                 }
             )
         }

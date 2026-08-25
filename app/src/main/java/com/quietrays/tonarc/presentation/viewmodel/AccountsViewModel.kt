@@ -287,7 +287,10 @@ class AccountsViewModel @Inject constructor(
                     when (service) {
                         ExternalServiceAccount.NAVIDROME -> navidromeRepository.logout()
                         ExternalServiceAccount.JELLYFIN -> jellyfinRepository.logout()
-                        ExternalServiceAccount.YOUTUBE_MUSIC -> userPreferencesRepository.setYouTubeAuthCookies(null)
+                        ExternalServiceAccount.YOUTUBE_MUSIC -> {
+                            userPreferencesRepository.setYouTubeAuthCookies(null)
+                            userPreferencesRepository.setYouTubeVisitorData(null)
+                        }
                         ExternalServiceAccount.LISTENBRAINZ -> listenBrainzRepository.disconnect()
                     }
                 }
@@ -295,6 +298,23 @@ class AccountsViewModel @Inject constructor(
                 loggingOutServices.update { it - service }
             }
         }
+    }
+
+    fun connectYouTubeMusic(rawTokenOrCookies: String): Boolean {
+        val parsed = com.quietrays.tonarc.data.network.youtube.InnertubeAuthParser.parse(rawTokenOrCookies)
+        if (!parsed.isValid) {
+            return false
+        }
+
+        viewModelScope.launch {
+            if (!parsed.cookies.isNullOrBlank()) {
+                userPreferencesRepository.setYouTubeAuthCookies(parsed.cookies)
+            }
+            if (!parsed.visitorData.isNullOrBlank()) {
+                userPreferencesRepository.setYouTubeVisitorData(parsed.visitorData)
+            }
+        }
+        return true
     }
 
     fun connectListenBrainz(token: String, serverUrl: String) {
