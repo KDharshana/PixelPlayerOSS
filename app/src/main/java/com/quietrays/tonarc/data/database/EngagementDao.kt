@@ -46,8 +46,8 @@ interface EngagementDao {
      * More efficient than read-modify-write pattern.
      */
     @Query("""
-        INSERT INTO song_engagements (song_id, play_count, total_play_duration_ms, last_played_timestamp)
-        VALUES (:songId, 1, :durationMs, :timestamp)
+        INSERT INTO song_engagements (song_id, play_count, total_play_duration_ms, last_played_timestamp, skip_before_30s_count, completion_count, session_repeat_count, last_session_id)
+        VALUES (:songId, 1, :durationMs, :timestamp, 0, 0, 0, NULL)
         ON CONFLICT(song_id) DO UPDATE SET
             play_count = play_count + 1,
             total_play_duration_ms = total_play_duration_ms + :durationMs,
