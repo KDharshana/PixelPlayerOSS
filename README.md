@@ -1,8 +1,8 @@
 
-# PixelPlayerOSS
+# Tonarc
 
 <p align="center">
-  <img src="assets/pixelplayeross_header.png" alt="PixelPlayerOSS Header" width="100%"/>
+  <img src="assets/pixelplayeross_header.png" alt="Tonarc Header" width="100%"/>
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@
 
 ## Executive Overview
 
-**PixelPlayerOSS** is a privacy-first, high-performance Android audio player and streaming client engineered with Jetpack Compose and Material 3 Expressive design. It unifies local high-resolution audio files, self-hosted media server streaming (Navidrome, Jellyfin), client-side YouTube Music discovery, and an on-device personalized recommendation engine into a cohesive audio environment.
+**Tonarc** is a privacy-first, high-performance Android audio player and streaming client engineered with Jetpack Compose and Material 3 Expressive design. It unifies local high-resolution audio files, self-hosted media server streaming (Navidrome, Jellyfin), client-side YouTube Music discovery, and an on-device personalized recommendation engine into a cohesive audio environment.
 
 ### Core Principles & Privacy
 - **100% Privacy by Default**: Zero proprietary trackers, analytics, or telemetry SDKs (no Firebase, Crashlytics, or Google Analytics).
@@ -145,7 +145,7 @@
 ## Project Layout
 
 ```
-PixelPlayerOSS/
+Tonarc/
 ├── app/
 │   ├── schemas/                          # Versioned Room DB JSON schemas
 │   └── src/
@@ -212,7 +212,7 @@ Install Debug APK to connected device:
 
 Assemble Universal Debug APK (single binary without ABI splits):
 ```sh
-./gradlew :app:assembleDebug -Ppixelplayer.enableAbiSplits=false --no-daemon
+./gradlew :app:assembleDebug -Ptonarc.enableAbiSplits=false --no-daemon
 ```
 
 Assemble Signed Release APKs:
@@ -266,10 +266,10 @@ Refer to [CONTRIBUTING.md](CONTRIBUTING.md) for pull request guidelines and [SEC
 
 ## License and Attribution
 
-PixelPlayerOSS is licensed under the terms of the **GNU General Public License v3.0** (`SPDX-License-Identifier: GPL-3.0-or-later`).
+Tonarc is licensed under the terms of the **GNU General Public License v3.0** (`SPDX-License-Identifier: GPL-3.0-or-later`).
 
 ```text
-PixelPlayerOSS
+Tonarc
 Copyright (C) 2026 KDharshana and Contributors
 
 This program is free software: you can redistribute it and/or modify
