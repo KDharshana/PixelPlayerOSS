@@ -282,7 +282,8 @@ class PlayerViewModel @Inject constructor(
     private val youTubeDao: com.quietrays.tonarc.data.database.YouTubeDao,
     private val innertubeApiService: InnertubeApiService,
     private val sessionToken: SessionToken,
-    private val mediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory
+    private val mediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory,
+    private val smartRadioEngine: com.quietrays.tonarc.data.recommendation.SmartRadioEngine
 ) : ViewModel() {
 
     fun playSmartPlaylist(type: com.quietrays.tonarc.data.model.SmartPlaylistType) {
@@ -296,11 +297,60 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun playInstantMixForSong(seedSong: Song) {
+    /**
+     * Starts radio playback immediately for the seed song (zero startup delay),
+     * and asynchronously fetches and appends radio tracks to the active queue.
+     */
+    fun playInstantRadio(seedSong: Song) {
+        val radioTitle = if (seedSong.title.isNotBlank()) "${seedSong.title} Radio" else "Radio"
+        showAndPlaySong(seedSong, listOf(seedSong), radioTitle)
         viewModelScope.launch {
-            val radioTracks = youTubeRepository.getRadioTracksForSong(seedSong)
-            val queue = if (radioTracks.isNotEmpty()) listOf(seedSong) + radioTracks else listOf(seedSong)
-            playSongs(queue, seedSong, "${seedSong.title} Mix", null)
+            val radioResult = smartRadioEngine.generateRadioForSong(seedSong)
+            val radioTracks = radioResult.tracks
+            if (radioTracks.isNotEmpty()) {
+                val controller = mediaController ?: playbackStateHolder.mediaController
+                if (controller != null && controller.isConnected) {
+                    val existingMediaIds = (0 until controller.mediaItemCount).map {
+                        controller.getMediaItemAt(it).mediaId
+                    }.toSet()
+                    val newTracks = radioTracks.filter {
+                        it.id !in existingMediaIds && it.contentUriString !in existingMediaIds
+                    }
+                    if (newTracks.isNotEmpty()) {
+                        cacheYouTubeSongsIfNeeded(newTracks)
+                        val newMediaItems = newTracks.map { buildPlaybackMediaItem(it) }
+                        controller.addMediaItems(newMediaItems)
+                        val currentQueue = _playerUiState.value.currentPlaybackQueue
+                        val updatedQueue = (currentQueue.ifEmpty { persistentListOf(seedSong) } + newTracks)
+                            .distinctBy { it.id.ifBlank { it.contentUriString } }
+                            .toImmutableList()
+                        queueStateHolder.setOriginalQueueOrder(updatedQueue)
+                        _playerUiState.update { it.copy(currentPlaybackQueue = updatedQueue) }
+                    }
+                }
+            }
+        }
+    }
+
+    fun playInstantMixForSong(seedSong: Song) {
+        playInstantRadio(seedSong)
+    }
+
+    fun playArtistRadio(artistName: String) {
+        viewModelScope.launch {
+            val radioResult = smartRadioEngine.generateRadioForArtist(artistName)
+            val fullQueue = if (radioResult.tracks.any { it.id == radioResult.seed.id }) {
+                radioResult.tracks
+            } else if (radioResult.seed.id.isNotBlank() && radioResult.seed.title.isNotBlank()) {
+                listOf(radioResult.seed) + radioResult.tracks
+            } else {
+                radioResult.tracks
+            }
+            if (fullQueue.isNotEmpty()) {
+                playSongs(fullQueue, fullQueue.first(), radioResult.radioTitle, null)
+            } else {
+                _toastEvents.emit(context.getString(R.string.no_valid_songs))
+            }
         }
     }
 

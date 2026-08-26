@@ -181,6 +181,8 @@ class MusicService : MediaSessionService() {
     @Inject
     lateinit var smartPlaylistGenerator: com.quietrays.tonarc.data.repository.SmartPlaylistGenerator
     @Inject
+    lateinit var smartRadioEngine: com.quietrays.tonarc.data.recommendation.SmartRadioEngine
+    @Inject
     @AppScope
     lateinit var appScope: CoroutineScope
 
@@ -1268,6 +1270,10 @@ class MusicService : MediaSessionService() {
     private var lastAutoplaySeedId: String? = null
 
     private fun checkAndTriggerInfiniteAutoplay(currentMediaItem: MediaItem?) {
+        maybeFetchInfiniteAutoplayTracks(currentMediaItem)
+    }
+
+    internal fun maybeFetchInfiniteAutoplayTracks(currentMediaItem: MediaItem?) {
         if (currentMediaItem == null) return
         val player = mediaSession?.player ?: engine.masterPlayer
         val currentIndex = player.currentMediaItemIndex
@@ -1302,11 +1308,16 @@ class MusicService : MediaSessionService() {
                         youtubeId = if (mediaId.startsWith("youtube_")) mediaId.removePrefix("youtube_") else null
                     )
 
-                    val radioSongs = runCatching { youTubeRepository.getRadioTracksForSong(currentSong) }.getOrDefault(emptyList())
-                    val songsToAppend = if (radioSongs.isNotEmpty()) {
-                        radioSongs
+                    val radioResult = runCatching {
+                        smartRadioEngine.generateRadioForSong(currentSong, initialLimit = 20)
+                    }.getOrNull()
+
+                    val songsToAppend = if (radioResult != null && radioResult.tracks.isNotEmpty()) {
+                        radioResult.tracks
                     } else {
-                        smartPlaylistGenerator.getSmartQueueForSong(currentSong, limit = 20)
+                        runCatching {
+                            smartPlaylistGenerator.getSmartQueueForSong(currentSong, limit = 20)
+                        }.getOrDefault(emptyList())
                     }
 
                     if (songsToAppend.isNotEmpty()) {
