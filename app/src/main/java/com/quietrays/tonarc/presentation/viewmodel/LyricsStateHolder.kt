@@ -19,14 +19,19 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,9 +56,24 @@ class LyricsStateHolder @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val songMetadataEditor: SongMetadataEditor
 ) {
+    internal var ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+    constructor(
+        musicRepository: MusicRepository,
+        userPreferencesRepository: UserPreferencesRepository,
+        songMetadataEditor: SongMetadataEditor,
+        ioDispatcher: CoroutineDispatcher
+    ) : this(musicRepository, userPreferencesRepository, songMetadataEditor) {
+        this.ioDispatcher = ioDispatcher
+    }
+
     private var scope: CoroutineScope? = null
     private var loadingJob: Job? = null
     private var loadCallback: LyricsLoadCallback? = null
+    private var activeSongId: String? = null
+
+    private val _lyricsState = MutableStateFlow<Lyrics?>(null)
+    val lyricsState: StateFlow<Lyrics?> = _lyricsState.asStateFlow()
 
     private val _currentSongSyncOffset = MutableStateFlow(0)
     val currentSongSyncOffset: StateFlow<Int> = _currentSongSyncOffset.asStateFlow()
@@ -76,6 +96,7 @@ class LyricsStateHolder @Inject constructor(
     /**
      * Initialize with coroutine scope and callback from ViewModel.
      */
+    @OptIn(FlowPreview::class)
     fun initialize(
         coroutineScope: CoroutineScope,
         callback: LyricsLoadCallback,
@@ -94,6 +115,51 @@ class LyricsStateHolder @Inject constructor(
                     }
                 }
         }
+
+        coroutineScope.launch {
+            stablePlayerState
+                .map { it.currentSong }
+                .distinctUntilChanged { old, new -> old?.id == new?.id }
+                .debounce(300L)
+                .collectLatest { song ->
+                    if (song != null && song.id.isNotBlank() && song.id != Song.emptySong().id) {
+                        if (activeSongId != song.id || _lyricsState.value == null) {
+                            preloadLyricsForSong(song)
+                        }
+                    } else {
+                        activeSongId = null
+                        _lyricsState.value = null
+                    }
+                }
+        }
+    }
+
+    private suspend fun preloadLyricsForSong(song: Song) {
+        val targetSongId = song.id
+        activeSongId = targetSongId
+        loadCallback?.onLoadingStarted(targetSongId)
+
+        val sourcePreference = runCatching {
+            userPreferencesRepository.lyricsSourcePreferenceFlow.first()
+        }.getOrDefault(LyricsSourcePreference.EMBEDDED_FIRST)
+
+        val fetchedLyrics = try {
+            withContext(ioDispatcher) {
+                musicRepository.getLyrics(
+                    song = song,
+                    sourcePreference = sourcePreference
+                )
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            null
+        }
+
+        if (activeSongId == targetSongId) {
+            _lyricsState.value = fetchedLyrics
+            loadCallback?.onLyricsLoaded(targetSongId, fetchedLyrics)
+        }
     }
 
     /**
@@ -104,12 +170,13 @@ class LyricsStateHolder @Inject constructor(
     fun loadLyricsForSong(song: Song, sourcePreference: LyricsSourcePreference) {
         loadingJob?.cancel()
         val targetSongId = song.id
+        activeSongId = targetSongId
 
         loadingJob = scope?.launch {
             loadCallback?.onLoadingStarted(targetSongId)
 
             val fetchedLyrics = try {
-                withContext(Dispatchers.IO) {
+                withContext(ioDispatcher) {
                     musicRepository.getLyrics(
                         song = song,
                         sourcePreference = sourcePreference
@@ -121,7 +188,10 @@ class LyricsStateHolder @Inject constructor(
                 null
             }
 
-            loadCallback?.onLyricsLoaded(targetSongId, fetchedLyrics)
+            if (activeSongId == targetSongId) {
+                _lyricsState.value = fetchedLyrics
+                loadCallback?.onLyricsLoaded(targetSongId, fetchedLyrics)
+            }
         }
     }
 
@@ -171,12 +241,15 @@ class LyricsStateHolder @Inject constructor(
             _searchUiState.value = LyricsSearchUiState.Loading
 
             if (!forcePickResults) {
-                val storedLyrics = withContext(Dispatchers.IO) {
+                val storedLyrics = withContext(ioDispatcher) {
                     musicRepository.getStoredLyrics(song)
                 }
                 if (storedLyrics != null) {
                     val (lyrics, rawLyrics) = storedLyrics
                     _searchUiState.value = LyricsSearchUiState.Success(lyrics)
+                    _lyricsState.value = lyrics
+                    activeSongId = song.id
+                    loadCallback?.onLyricsLoaded(song.id, lyrics)
                     _songUpdates.emit(song.withPersistedLyrics(rawLyrics, refreshedAlbumArtUri = null) to lyrics)
                     _messageEvents.emit(contextHelper(R.string.lyrics_already_available))
                     return@launch
@@ -196,13 +269,16 @@ class LyricsStateHolder @Inject constructor(
             }
 
             for (sourceCheck in localSourceChecks) {
-                val result = withContext(Dispatchers.IO) { sourceCheck() }
+                val result = withContext(ioDispatcher) { sourceCheck() }
                 if (result != null) {
                     val (rawLyrics, messageResId) = result
                     val parsed = LyricsUtils.parseLyrics(rawLyrics)
                     if (hasValidLyrics(parsed)) {
                         val lyrics = parsed.copy(areFromRemote = false)
                         _searchUiState.value = LyricsSearchUiState.Success(lyrics)
+                        _lyricsState.value = lyrics
+                        activeSongId = song.id
+                        loadCallback?.onLyricsLoaded(song.id, lyrics)
 
                         val songId = song.id.toLongOrNull()
                         if (songId != null) {
@@ -269,6 +345,9 @@ class LyricsStateHolder @Inject constructor(
     fun acceptLyricsSearchResult(result: LyricsSearchResult, currentSong: Song) {
         scope?.launch {
             _searchUiState.value = LyricsSearchUiState.Success(result.lyrics)
+            _lyricsState.value = result.lyrics
+            activeSongId = currentSong.id
+            loadCallback?.onLyricsLoaded(currentSong.id, result.lyrics)
 
             currentSong.id.toLongOrNull()?.let { songId ->
                 musicRepository.updateLyrics(songId, result.rawLyrics)
@@ -294,7 +373,11 @@ class LyricsStateHolder @Inject constructor(
             if (currentSong != null && currentSong.id.toLongOrNull() == songId) {
                 val refreshedAlbumArtUri = persistLyricsToFileMetadataIfPossible(currentSong, sanitizedContent)
                 val updatedSong = currentSong.withPersistedLyrics(sanitizedContent, refreshedAlbumArtUri)
-                _songUpdates.emit(updatedSong to parsedLyrics.takeIf(::hasValidLyrics))
+                val lyrics = parsedLyrics.takeIf(::hasValidLyrics)
+                _lyricsState.value = lyrics
+                activeSongId = currentSong.id
+                loadCallback?.onLyricsLoaded(currentSong.id, lyrics)
+                _songUpdates.emit(updatedSong to lyrics)
             }
 
             _messageEvents.emit("Lyrics imported successfully!")
@@ -303,6 +386,11 @@ class LyricsStateHolder @Inject constructor(
 
     fun resetLyrics(songId: Long) {
         resetSearchState()
+        if (activeSongId == songId.toString()) {
+            _lyricsState.value = null
+            activeSongId = null
+            loadCallback?.onLyricsLoaded(songId.toString(), null)
+        }
         scope?.launch {
             musicRepository.resetLyrics(songId)
             _songUpdates.emit(Song.emptySong().copy(id = songId.toString()) to null)
@@ -311,6 +399,9 @@ class LyricsStateHolder @Inject constructor(
 
     fun resetAllLyrics() {
         resetSearchState()
+        _lyricsState.value = null
+        activeSongId = null
+        loadCallback?.onLyricsLoaded("", null)
         scope?.launch {
             musicRepository.resetAllLyrics()
         }
@@ -365,7 +456,7 @@ class LyricsStateHolder @Inject constructor(
         val normalizedLyrics = rawLyrics.trim()
         if (normalizedLyrics.isBlank()) return null
 
-        return withContext(Dispatchers.IO) {
+        return withContext(ioDispatcher) {
             val existingArtwork = runCatching {
                 AudioMetadataReader.read(File(song.path))?.artwork
             }.getOrNull()
@@ -397,6 +488,8 @@ class LyricsStateHolder @Inject constructor(
         loadingJob?.cancel()
         scope = null
         loadCallback = null
+        activeSongId = null
+        _lyricsState.value = null
     }
 }
 
