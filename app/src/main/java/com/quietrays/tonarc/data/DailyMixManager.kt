@@ -19,6 +19,21 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+enum class MixMood(val displayName: String, val subtitle: String) {
+    MORNING_FOCUS("🌅 Morning Rise", "Acoustic, soft indie & ambient wakeups"),
+    ENERGY_BOOST("⚡ Afternoon Energy", "High-tempo hits, pop & workout drive"),
+    EVENING_CHILL("🌙 Evening Chill", "Downtempo, R&B, jazz & calm favorites"),
+    MIDNIGHT_LOFI("🌌 Midnight Mood", "Lofi, chillhop & late-night serenity"),
+    DISCOVERY_RADAR("📡 Discovery Radar", "Fresh tracks & hidden gems you haven't heard")
+}
+
+data class ContextualMix(
+    val mood: MixMood,
+    val title: String,
+    val subtitle: String,
+    val songs: List<Song>
+)
+
 @Singleton
 class DailyMixManager @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -511,6 +526,147 @@ class DailyMixManager @Inject constructor(
         return orderedResult.take(limit.coerceAtMost(orderedResult.size))
     }
 
+    fun getCurrentTimeMood(calendar: Calendar = Calendar.getInstance()): MixMood {
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
+        return when (hour) {
+            in 5..11 -> MixMood.MORNING_FOCUS
+            in 12..17 -> MixMood.ENERGY_BOOST
+            in 18..22 -> MixMood.EVENING_CHILL
+            else -> MixMood.MIDNIGHT_LOFI
+        }
+    }
+
+    suspend fun generateContextualMix(
+        mood: MixMood,
+        allSongs: List<Song>,
+        favoriteSongIds: Set<String> = emptySet(),
+        limit: Int = 30
+    ): ContextualMix {
+        if (allSongs.isEmpty()) {
+            return ContextualMix(
+                mood = mood,
+                title = mood.displayName,
+                subtitle = mood.subtitle,
+                songs = emptyList()
+            )
+        }
+
+        val calendar = Calendar.getInstance()
+        val seed = calendar.get(Calendar.YEAR) * 1000 + calendar.get(Calendar.DAY_OF_YEAR) + (mood.ordinal + 1) * 37
+        val random = java.util.Random(seed.toLong())
+
+        val rankedSongs = computeRankedSongs(allSongs, favoriteSongIds, random)
+        if (rankedSongs.isEmpty()) {
+            return ContextualMix(
+                mood = mood,
+                title = mood.displayName,
+                subtitle = mood.subtitle,
+                songs = allSongs.shuffled(random).take(limit.coerceAtMost(allSongs.size))
+            )
+        }
+
+        val diversityState = DiversityState()
+
+        val pickedSongs = if (mood == MixMood.DISCOVERY_RADAR) {
+            val engagements = readEngagements()
+            val now = System.currentTimeMillis()
+            val sevenDaysMs = 7 * 86_400_000L
+
+            val isExcluded: (Song) -> Boolean = { song ->
+                val stats = engagements[song.id]
+                stats != null && stats.lastPlayedTimestamp > (now - sevenDaysMs) && stats.playCount >= 2
+            }
+
+            val discoveryCandidates = rankedSongs
+                .filterNot { isExcluded(it.song) }
+                .sortedWith(compareByDescending<RankedSong> { it.discoveryScore }.thenBy { it.song.id })
+
+            val selected = pickWithDiversity(discoveryCandidates, favoriteSongIds, limit, diversityState)
+            val combined = selected.toMutableList()
+
+            if (combined.size < limit) {
+                val remainingDiscovery = discoveryCandidates.filterNot { candidate ->
+                    combined.any { it.id == candidate.song.id }
+                }
+                val quotaFill = pickWithDiversity(remainingDiscovery, favoriteSongIds, limit - combined.size, diversityState)
+                combined.addAll(quotaFill)
+            }
+
+            if (combined.size < limit) {
+                val eligibleOther = allSongs
+                    .filterNot { isExcluded(it) || combined.any { s -> s.id == it.id } }
+                    .shuffled(random)
+                for (song in eligibleOther) {
+                    combined.add(song)
+                    if (combined.size >= limit) break
+                }
+            }
+
+            combined.distinctBy { it.id }.take(limit.coerceAtMost(allSongs.size))
+        } else {
+            val matchingRanked = rankedSongs.filter { matchesMood(it.song, mood) }
+            val selected = pickWithDiversity(matchingRanked, favoriteSongIds, limit, diversityState)
+            val combined = selected.toMutableList()
+
+            if (combined.size < limit) {
+                val remainingRanked = rankedSongs.filterNot { candidate ->
+                    combined.any { it.id == candidate.song.id }
+                }
+                val quotaFill = pickWithDiversity(remainingRanked, favoriteSongIds, limit - combined.size, diversityState)
+                combined.addAll(quotaFill)
+            }
+
+            if (combined.size < limit) {
+                val remaining = allSongs
+                    .filterNot { song -> combined.any { it.id == song.id } }
+                    .shuffled(random)
+                for (song in remaining) {
+                    combined.add(song)
+                    if (combined.size >= limit) break
+                }
+            }
+
+            combined.distinctBy { it.id }.take(limit.coerceAtMost(allSongs.size))
+        }
+
+        return ContextualMix(
+            mood = mood,
+            title = mood.displayName,
+            subtitle = mood.subtitle,
+            songs = pickedSongs
+        )
+    }
+
+    suspend fun generateAllContextualMixes(
+        allSongs: List<Song>,
+        favoriteSongIds: Set<String> = emptySet(),
+        limit: Int = 30
+    ): List<ContextualMix> {
+        return MixMood.entries.map { mood ->
+            generateContextualMix(mood, allSongs, favoriteSongIds, limit)
+        }
+    }
+
+    private fun matchesMood(song: Song, mood: MixMood): Boolean {
+        val keywords = when (mood) {
+            MixMood.MORNING_FOCUS -> MORNING_FOCUS_KEYWORDS
+            MixMood.ENERGY_BOOST -> ENERGY_BOOST_KEYWORDS
+            MixMood.EVENING_CHILL -> EVENING_CHILL_KEYWORDS
+            MixMood.MIDNIGHT_LOFI -> MIDNIGHT_LOFI_KEYWORDS
+            MixMood.DISCOVERY_RADAR -> emptyList()
+        }
+        if (keywords.isEmpty()) return false
+
+        val genreText = song.genre?.lowercase()?.trim() ?: ""
+        val titleText = song.title.lowercase().trim()
+        val albumText = song.album.lowercase().trim()
+
+        return keywords.any { kw ->
+            val keyword = kw.lowercase()
+            genreText.contains(keyword) || titleText.contains(keyword) || albumText.contains(keyword)
+        }
+    }
+
     private fun artistKey(song: Song): String {
         return if (song.artistId != 0L) "id_${song.artistId}"
         else "name_${song.artist.trim().lowercase()}"
@@ -643,5 +799,22 @@ class DailyMixManager @Inject constructor(
     companion object {
         private const val TAG = "DailyMixManager"
         private val SCORE_KEY_CANDIDATES = listOf("score", "count", "value")
+
+        private val MORNING_FOCUS_KEYWORDS = listOf(
+            "acoustic", "folk", "ambient", "classical", "soft indie", "indie folk",
+            "chill", "low tempo", "slow", "piano", "meditation", "calm", "morning"
+        )
+        private val ENERGY_BOOST_KEYWORDS = listOf(
+            "pop", "rock", "dance", "electronic", "edm", "hip-hop", "hip hop",
+            "workout", "upbeat", "rap", "metal", "house", "techno", "party", "energy", "fitness"
+        )
+        private val EVENING_CHILL_KEYWORDS = listOf(
+            "r&b", "rnb", "soul", "jazz", "downtempo", "blues", "indie",
+            "mellow", "lounge", "evening", "smooth"
+        )
+        private val MIDNIGHT_LOFI_KEYWORDS = listOf(
+            "lofi", "lo-fi", "chillhop", "synthwave", "ambient", "instrumental",
+            "slow", "midnight", "night", "sleep", "drone", "study"
+        )
     }
 }
