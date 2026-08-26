@@ -1534,8 +1534,35 @@ class LyricsRepositoryImpl @Inject constructor(
                 val parsed = LyricsUtils.parseLyrics(rawLyrics).copy(areFromRemote = true)
                 if (!parsed.isValid()) return@mapNotNull null
 
-                LyricsSearchResult(response, parsed, rawLyrics)
-            }.sortedByDescending { !it.record.syncedLyrics.isNullOrEmpty() }
+                LyricsSearchResult(response, parsed, rawLyrics, source = "LRCLIB")
+            }.toMutableList()
+
+            // Also check YouTube Music transcript for the search query
+            try {
+                val ytmResults = innertubeApiService.search(query, com.quietrays.tonarc.data.network.youtube.InnertubeApiService.YTM_FILTER_SONGS)
+                for (ytmTrack in ytmResults.songs.take(2)) {
+                    val transcript = innertubeApiService.getTranscriptLyrics(ytmTrack.videoId)
+                    if (!transcript.isNullOrBlank()) {
+                        val parsedYtm = LyricsUtils.parseLyrics(transcript).copy(areFromRemote = true)
+                        if (parsedYtm.isValid() && !parsedYtm.synced.isNullOrEmpty()) {
+                            val dummyRecord = LrcLibResponse(
+                                id = -Math.abs(ytmTrack.videoId.hashCode()),
+                                name = ytmTrack.title,
+                                artistName = ytmTrack.artist,
+                                albumName = ytmTrack.album ?: "YouTube Music",
+                                duration = ytmTrack.durationSeconds.toDouble(),
+                                plainLyrics = null,
+                                syncedLyrics = transcript
+                            )
+                            results.add(LyricsSearchResult(dummyRecord, parsedYtm, transcript, source = "YouTube"))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                LogUtils.w(this@LyricsRepositoryImpl, "YouTube transcript search query failed: ${e.message}")
+            }
+
+            results.sortByDescending { !it.record.syncedLyrics.isNullOrEmpty() }
 
             if (results.isEmpty()) {
                 Result.failure(NoLyricsFoundException(query))
@@ -1744,7 +1771,12 @@ class LyricsRepositoryImpl @Inject constructor(
     }
 }
 
-data class LyricsSearchResult(val record: LrcLibResponse, val lyrics: Lyrics, val rawLyrics: String)
+data class LyricsSearchResult(
+    val record: LrcLibResponse,
+    val lyrics: Lyrics,
+    val rawLyrics: String,
+    val source: String = "LRCLIB"
+)
 
 data class NoLyricsFoundException(val query: String? = null) : Exception()
 
