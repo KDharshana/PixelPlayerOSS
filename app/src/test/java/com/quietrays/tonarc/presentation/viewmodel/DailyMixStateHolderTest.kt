@@ -1,6 +1,8 @@
 package com.quietrays.tonarc.presentation.viewmodel
 
+import com.quietrays.tonarc.data.ContextualMix
 import com.quietrays.tonarc.data.DailyMixManager
+import com.quietrays.tonarc.data.MixMood
 import com.quietrays.tonarc.data.database.YouTubeDao
 import com.quietrays.tonarc.data.database.YouTubeSongEntity
 import com.quietrays.tonarc.data.model.Song
@@ -66,6 +68,7 @@ class DailyMixStateHolderTest {
     @BeforeEach
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        every { mockDailyMixManager.getCurrentTimeMood(any()) } returns MixMood.MORNING_FOCUS
         dailyMixStateHolder = DailyMixStateHolder(
             dailyMixManager = mockDailyMixManager,
             userPreferencesRepository = mockUserPreferencesRepository,
@@ -108,18 +111,82 @@ class DailyMixStateHolderTest {
 
         val expectedDailyMix = listOf(localSong, ytQuickPick)
         val expectedYourMix = listOf(ytSongEntity.toSong(), localSong, ytQuickPick)
+        val expectedContextualMixes = listOf(
+            ContextualMix(MixMood.MORNING_FOCUS, MixMood.MORNING_FOCUS.displayName, MixMood.MORNING_FOCUS.subtitle, listOf(localSong)),
+            ContextualMix(MixMood.DISCOVERY_RADAR, MixMood.DISCOVERY_RADAR.displayName, MixMood.DISCOVERY_RADAR.subtitle, listOf(ytQuickPick))
+        )
 
         coEvery { mockDailyMixManager.generateDailyMix(any(), any()) } returns expectedDailyMix
         coEvery { mockDailyMixManager.generateYourMix(any(), any()) } returns expectedYourMix
+        coEvery { mockDailyMixManager.generateAllContextualMixes(any(), any()) } returns expectedContextualMixes
 
         dailyMixStateHolder.updateDailyMix(flowOf(emptySet()))
         advanceUntilIdle()
 
         assertEquals(expectedDailyMix, dailyMixStateHolder.dailyMixSongs.value)
         assertEquals(expectedYourMix, dailyMixStateHolder.yourMixSongs.value)
+        assertEquals(expectedContextualMixes, dailyMixStateHolder.contextualMixes.value)
 
         coVerify { mockUserPreferencesRepository.saveDailyMixSongIds(listOf("101", "youtube_vid2")) }
         coVerify { mockUserPreferencesRepository.saveYourMixSongIds(listOf("youtube_vid1", "101", "youtube_vid2")) }
+    }
+
+    @Test
+    fun `selectMood updates selectedMood state flow`() {
+        assertEquals(MixMood.MORNING_FOCUS, dailyMixStateHolder.selectedMood.value)
+
+        dailyMixStateHolder.selectMood(MixMood.ENERGY_BOOST)
+        assertEquals(MixMood.ENERGY_BOOST, dailyMixStateHolder.selectedMood.value)
+
+        dailyMixStateHolder.selectMood(MixMood.DISCOVERY_RADAR)
+        assertEquals(MixMood.DISCOVERY_RADAR, dailyMixStateHolder.selectedMood.value)
+    }
+
+    @Test
+    fun `updateDailyMix populates contextualMixes for all 5 moods`() = testScope.runTest {
+        val song1 = createTestSong("1", "Song 1", "Artist")
+        val song2 = createTestSong("2", "Song 2", "Artist")
+
+        coEvery { mockMusicRepository.getAllSongsOnce() } returns listOf(song1, song2)
+        coEvery { mockYouTubeDao.getAllYouTubeSongsList() } returns emptyList()
+        coEvery { mockYouTubeRepository.getHomeRecommendations() } returns YouTubeRepository.HomeRecommendations()
+        every { mockUserPreferencesRepository.favoriteArtistsFlow } returns flowOf(emptySet())
+
+        val mockContextualMixes = MixMood.entries.map { mood ->
+            ContextualMix(
+                mood = mood,
+                title = mood.displayName,
+                subtitle = mood.subtitle,
+                songs = listOf(song1, song2)
+            )
+        }
+
+        coEvery { mockDailyMixManager.generateDailyMix(any(), any()) } returns listOf(song1)
+        coEvery { mockDailyMixManager.generateYourMix(any(), any()) } returns listOf(song2)
+        coEvery { mockDailyMixManager.generateAllContextualMixes(any(), any()) } returns mockContextualMixes
+
+        dailyMixStateHolder.updateDailyMix(flowOf(emptySet()))
+        advanceUntilIdle()
+
+        assertEquals(5, dailyMixStateHolder.contextualMixes.value.size)
+        assertEquals(mockContextualMixes, dailyMixStateHolder.contextualMixes.value)
+        assertEquals(MixMood.MORNING_FOCUS, dailyMixStateHolder.contextualMixes.value[0].mood)
+        assertEquals(MixMood.DISCOVERY_RADAR, dailyMixStateHolder.contextualMixes.value[4].mood)
+    }
+
+    @Test
+    fun `updateDailyMix with empty candidate songs clears contextualMixes`() = testScope.runTest {
+        coEvery { mockMusicRepository.getAllSongsOnce() } returns emptyList()
+        coEvery { mockYouTubeDao.getAllYouTubeSongsList() } returns emptyList()
+        coEvery { mockYouTubeRepository.getHomeRecommendations() } returns YouTubeRepository.HomeRecommendations()
+        every { mockUserPreferencesRepository.favoriteArtistsFlow } returns flowOf(emptySet())
+
+        dailyMixStateHolder.updateDailyMix(flowOf(emptySet()))
+        advanceUntilIdle()
+
+        assertEquals(0, dailyMixStateHolder.dailyMixSongs.value.size)
+        assertEquals(0, dailyMixStateHolder.yourMixSongs.value.size)
+        assertEquals(0, dailyMixStateHolder.contextualMixes.value.size)
     }
 
     @Test

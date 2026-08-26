@@ -36,6 +36,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.quietrays.tonarc.R
+import com.quietrays.tonarc.data.ContextualMix
+import com.quietrays.tonarc.data.DailyMixManager
+import com.quietrays.tonarc.data.MixMood
 import com.quietrays.tonarc.data.EotStateHolder
 import com.quietrays.tonarc.data.database.AlbumArtThemeDao
 import com.quietrays.tonarc.data.database.YouTubeSongEntity
@@ -283,7 +286,8 @@ class PlayerViewModel @Inject constructor(
     private val innertubeApiService: InnertubeApiService,
     private val sessionToken: SessionToken,
     private val mediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory,
-    private val smartRadioEngine: com.quietrays.tonarc.data.recommendation.SmartRadioEngine
+    private val smartRadioEngine: com.quietrays.tonarc.data.recommendation.SmartRadioEngine,
+    private val dailyMixManager: DailyMixManager = dailyMixStateHolder.dailyMixManager
 ) : ViewModel() {
 
     fun playSmartPlaylist(type: com.quietrays.tonarc.data.model.SmartPlaylistType) {
@@ -1329,6 +1333,8 @@ class PlayerViewModel @Inject constructor(
 
     val dailyMixSongs: StateFlow<ImmutableList<Song>> = dailyMixStateHolder.dailyMixSongs
     val yourMixSongs: StateFlow<ImmutableList<Song>> = dailyMixStateHolder.yourMixSongs
+    val contextualMixes: StateFlow<List<ContextualMix>> = dailyMixStateHolder.contextualMixes
+    val selectedMood: StateFlow<MixMood> = dailyMixStateHolder.selectedMood
 
     private val _fromCommunitySongs = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
     val fromCommunitySongs = _fromCommunitySongs.asStateFlow()
@@ -1452,6 +1458,40 @@ class PlayerViewModel @Inject constructor(
 
     fun removeFromDailyMix(songId: String) {
         dailyMixStateHolder.removeFromDailyMix(songId)
+    }
+
+    fun selectMood(mood: MixMood) {
+        dailyMixStateHolder.selectMood(mood)
+    }
+
+    fun playContextualMix(mix: ContextualMix) {
+        if (mix.songs.isNotEmpty()) {
+            showAndPlaySong(
+                song = mix.songs.first(),
+                contextSongs = mix.songs,
+                queueName = mix.title,
+                isVoluntaryPlay = true
+            )
+        } else {
+            sendToast(context.getString(R.string.no_valid_songs))
+        }
+    }
+
+    fun playDiscoveryRadar() {
+        viewModelScope.launch {
+            val radarMix = dailyMixStateHolder.contextualMixes.value.firstOrNull { it.mood == MixMood.DISCOVERY_RADAR }
+                ?.takeIf { it.songs.isNotEmpty() }
+                ?: run {
+                    val allSongs = runCatching { musicRepository.getAllSongsOnce() }.getOrDefault(emptyList())
+                    val favIds = runCatching { favoriteSongIds.value }.getOrDefault(emptySet())
+                    dailyMixManager.generateContextualMix(MixMood.DISCOVERY_RADAR, allSongs, favIds)
+                }
+            if (radarMix.songs.isNotEmpty()) {
+                playContextualMix(radarMix)
+            } else {
+                sendToast(context.getString(R.string.no_valid_songs))
+            }
+        }
     }
 
     /**

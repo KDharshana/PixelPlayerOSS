@@ -9,6 +9,8 @@ import androidx.media3.session.SessionToken
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.ListenableFuture
 import com.quietrays.tonarc.MainCoroutineExtension
+import com.quietrays.tonarc.data.ContextualMix
+import com.quietrays.tonarc.data.MixMood
 import com.quietrays.tonarc.data.database.AlbumArtThemeDao
 import com.quietrays.tonarc.data.database.YouTubeDao
 import com.quietrays.tonarc.data.model.Song
@@ -371,5 +373,38 @@ class PlayerViewModelRadioTest {
 
         coVerify { mockSmartRadioEngine.generateRadioForArtist("Radiohead", any()) }
         verify { mockQueueStateHolder.setOriginalQueueOrder(any()) }
+    }
+
+    @Test
+    @DisplayName("playContextualMix plays first song and sets context songs in queue")
+    fun test_playContextualMix_playsSongsInContext() = runTest(testDispatcher) {
+        val mix = ContextualMix(
+            mood = MixMood.ENERGY_BOOST,
+            title = "⚡ Afternoon Energy",
+            subtitle = "High tempo drive",
+            songs = listOf(radioTrack1, radioTrack2)
+        )
+
+        playerViewModel.playContextualMix(mix)
+        advanceUntilIdle()
+
+        verify { mockQueueStateHolder.setOriginalQueueOrder(listOf(radioTrack1, radioTrack2)) }
+    }
+
+    @Test
+    @DisplayName("playDiscoveryRadar fetches and plays discovery radar mix")
+    fun test_playDiscoveryRadar_playsDiscoveryRadarMix() = runTest(testDispatcher) {
+        val radarMix = ContextualMix(
+            mood = MixMood.DISCOVERY_RADAR,
+            title = "📡 Discovery Radar",
+            subtitle = "Fresh tracks",
+            songs = listOf(radioTrack1, radioTrack2)
+        )
+        every { mockDailyMixStateHolder.contextualMixes } returns MutableStateFlow(listOf(radarMix))
+
+        playerViewModel.playDiscoveryRadar()
+        advanceUntilIdle()
+
+        verify { mockQueueStateHolder.setOriginalQueueOrder(listOf(radioTrack1, radioTrack2)) }
     }
 }

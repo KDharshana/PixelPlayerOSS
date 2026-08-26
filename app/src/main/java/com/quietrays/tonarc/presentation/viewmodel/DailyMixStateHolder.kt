@@ -1,6 +1,8 @@
 package com.quietrays.tonarc.presentation.viewmodel
 
+import com.quietrays.tonarc.data.ContextualMix
 import com.quietrays.tonarc.data.DailyMixManager
+import com.quietrays.tonarc.data.MixMood
 import com.quietrays.tonarc.data.database.YouTubeDao
 import com.quietrays.tonarc.data.database.YouTubeSongEntity
 import com.quietrays.tonarc.data.model.Song
@@ -35,7 +37,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class DailyMixStateHolder @Inject constructor(
-    private val dailyMixManager: DailyMixManager,
+    val dailyMixManager: DailyMixManager,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val musicRepository: MusicRepository,
     private val youTubeRepository: YouTubeRepository,
@@ -61,6 +63,19 @@ class DailyMixStateHolder @Inject constructor(
 
     private val _yourMixSongs = MutableStateFlow<ImmutableList<Song>>(persistentListOf())
     val yourMixSongs: StateFlow<ImmutableList<Song>> = _yourMixSongs.asStateFlow()
+
+    private val _contextualMixes = MutableStateFlow<List<ContextualMix>>(emptyList())
+    val contextualMixes: StateFlow<List<ContextualMix>> = _contextualMixes.asStateFlow()
+
+    private val _selectedMood = MutableStateFlow<MixMood>(dailyMixManager.getCurrentTimeMood())
+    val selectedMood: StateFlow<MixMood> = _selectedMood.asStateFlow()
+
+    /**
+     * Select a contextual mix mood.
+     */
+    fun selectMood(mood: MixMood) {
+        _selectedMood.value = mood
+    }
 
     /**
      * Initialize with coroutine scope from ViewModel.
@@ -135,9 +150,13 @@ class DailyMixStateHolder @Inject constructor(
                 val yourMix = dailyMixManager.generateYourMix(allCandidateSongs, favoriteIds)
                 _yourMixSongs.value = yourMix.toImmutableList()
                 userPreferencesRepository.saveYourMixSongIds(yourMix.map { it.id })
+
+                val contextual = dailyMixManager.generateAllContextualMixes(allCandidateSongs, favoriteIds)
+                _contextualMixes.value = contextual
             } else {
                 _dailyMixSongs.value = persistentListOf()
                 _yourMixSongs.value = persistentListOf()
+                _contextualMixes.value = emptyList()
             }
         }
     }
