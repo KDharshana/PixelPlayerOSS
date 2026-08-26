@@ -171,6 +171,7 @@ import com.quietrays.tonarc.presentation.components.AlbumMultiSelectionOptionShe
 import com.quietrays.tonarc.presentation.components.PlaylistMultiSelectionBottomSheet
 import com.quietrays.tonarc.presentation.components.DescribePlaylistDialog
 import com.quietrays.tonarc.presentation.components.PlaylistCreationTypeDialog
+import com.quietrays.tonarc.presentation.components.TasteProfileCard
 import com.quietrays.tonarc.presentation.components.subcomps.SelectionActionRow
 import com.quietrays.tonarc.presentation.components.subcomps.SelectionCountPill
 import com.quietrays.tonarc.presentation.viewmodel.ColorSchemePair
@@ -938,6 +939,13 @@ fun LibraryScreen(
                                     LibraryTabId.FOLDERS -> playerViewModel.sortFolders(option)
                                 }
                             }
+                        }
+
+                        if (!isSelectionMode && !isPlaylistSelectionMode && !isAlbumSelectionMode) {
+                            TasteProfileCard(
+                                playerViewModel = playerViewModel,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
                         }
 
                         AnimatedContent(
