@@ -28,18 +28,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Offline Room Caching**: Fetched lyrics are persisted locally for offline karaoke access.
 - **Attributed Manual Search**: Candidate search with source pills (`LRCLIB` / `YouTube Transcript`).
 
-#### 4. 🌅 Time-of-Day Contextual Mixes & Discovery Radar (Phase 4)
+#### 4. Time-of-Day Contextual Mixes & Discovery Radar (Phase 4)
 - **5 Dynamic Mood Mixes**:
-  - `🌅 Morning Rise`: Acoustic, soft indie & ambient wakeups.
-  - `⚡ Afternoon Energy`: High-tempo hits, pop & workout drive.
-  - `🌙 Evening Chill`: Downtempo, R&B, jazz & calm favorites.
-  - `🌌 Midnight Mood`: Lofi, chillhop & late-night serenity.
-  - `📡 Discovery Radar`: Pure discovery with 0 recent plays in the last 7 days.
+  - `Morning Rise`: Acoustic, soft indie & ambient wakeups.
+  - `Afternoon Energy`: High-tempo hits, pop & workout drive.
+  - `Evening Chill`: Downtempo, R&B, jazz & calm favorites.
+  - `Midnight Mood`: Lofi, chillhop & late-night serenity.
+  - `Discovery Radar`: Pure discovery with 0 recent plays in the last 7 days.
 - **Interactive Mood Carousel**: Filter chip row with animated dynamic gradient headers.
 - **Infinite Mood Playback**: Queue automatically continues generating tracks matching the active mood.
 
-#### 5. 📊 Library Taste Profile Card (Phase 5)
-- **Musical Archetype Classifier**: Dynamically determines listener personas (*"🌌 Late-Night Audiophile"*, *"🌅 Acoustic Explorer"*, *"⚡ High-Energy Motivator"*, *"🎧 Eclectic Dreamer"*, *"🎵 Melody Connoisseur"*).
+#### 5. Library Taste Profile Card (Phase 5)
+- **Musical Archetype Classifier**: Dynamically determines listener personas (*"Late-Night Audiophile"*, *"Acoustic Explorer"*, *"High-Energy Motivator"*, *"Eclectic Dreamer"*, *"Melody Connoisseur"*).
 - **Visual Analytics**: Top 3 genres percentage progress bar, top 5 artist affinity ranking, and total listening time counters.
 - **1-Tap "Play Top Taste"**: Personalized instant mix of your most-loved songs with infinite queue extension.
 - **Native Android Sharing**: Shareable music profile summary card.

@@ -549,7 +549,7 @@ private fun ExpressiveDailyMixHeader(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "📡 Pure Discovery • Unheard Gems",
+                                text = "Pure Discovery • Unheard Gems",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF10B981)

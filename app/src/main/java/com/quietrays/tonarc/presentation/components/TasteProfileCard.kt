@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Card
@@ -123,17 +125,19 @@ fun TasteProfileCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Emoji badge
+                    // Archetype Icon badge
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(44.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = profile.archetypeEmoji,
-                            fontSize = 24.sp
+                        Icon(
+                            imageVector = Icons.Rounded.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
@@ -187,13 +191,24 @@ fun TasteProfileCard(
                         shape = AbsoluteSmoothCornerShape(12.dp, 60),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
                     ) {
-                        Text(
-                            text = "🎧 ${formatListeningHours(profile.totalListeningDurationMs)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Headphones,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = formatListeningHours(profile.totalListeningDurationMs),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
 
                     Surface(
@@ -201,7 +216,7 @@ fun TasteProfileCard(
                         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
                     ) {
                         Text(
-                            text = "▶ ${profile.totalPlays} plays",
+                            text = "${profile.totalPlays} plays",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -387,10 +402,10 @@ fun TasteProfileCard(
                                     "N/A"
                                 }
                                 val shareText = buildString {
-                                    appendLine("🎵 My Tonarc Music Archetype: ${profile.archetypeEmoji} ${profile.archetypeTitle}")
-                                    appendLine("🎧 Total Listening: ${formatListeningHours(profile.totalListeningDurationMs)}")
-                                    appendLine("🔥 Top Genres: $genresSummary")
-                                    appendLine("👑 Top Artists: $artistsSummary")
+                                    appendLine("My Tonarc Music Archetype: ${profile.archetypeTitle}")
+                                    appendLine("Total Listening: ${formatListeningHours(profile.totalListeningDurationMs)}")
+                                    appendLine("Top Genres: $genresSummary")
+                                    appendLine("Top Artists: $artistsSummary")
                                     appendLine()
                                     append("Listen with Tonarc: https://github.com/KDharshana/PixelPlayerOSS")
                                 }

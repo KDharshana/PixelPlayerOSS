@@ -20,11 +20,11 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 enum class MixMood(val displayName: String, val subtitle: String) {
-    MORNING_FOCUS("🌅 Morning Rise", "Acoustic, soft indie & ambient wakeups"),
-    ENERGY_BOOST("⚡ Afternoon Energy", "High-tempo hits, pop & workout drive"),
-    EVENING_CHILL("🌙 Evening Chill", "Downtempo, R&B, jazz & calm favorites"),
-    MIDNIGHT_LOFI("🌌 Midnight Mood", "Lofi, chillhop & late-night serenity"),
-    DISCOVERY_RADAR("📡 Discovery Radar", "Fresh tracks & hidden gems you haven't heard")
+    MORNING_FOCUS("Morning Rise", "Acoustic, soft indie & ambient wakeups"),
+    ENERGY_BOOST("Afternoon Energy", "High-tempo hits, pop & workout drive"),
+    EVENING_CHILL("Evening Chill", "Downtempo, R&B, jazz & calm favorites"),
+    MIDNIGHT_LOFI("Midnight Mood", "Lofi, chillhop & late-night serenity"),
+    DISCOVERY_RADAR("Discovery Radar", "Fresh tracks & hidden gems you haven't heard")
 }
 
 data class ContextualMix(
