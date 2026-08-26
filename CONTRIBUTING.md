@@ -1,79 +1,99 @@
-# Contributing to PixelPlayerOSS
+# Contributing to Tonarc
 
-Thanks for your interest in improving PixelPlayerOSS! This guide covers the
-conventions that aren't obvious from the code alone. For a deeper architectural
-overview, see [CLAUDE.md](CLAUDE.md) (written for AI assistants but accurate for
-humans too).
+Thank you for your interest in contributing to Tonarc (PixelPlayerOSS)! We welcome contributions of all kinds: bug fixes, new features, UI/UX polish, performance enhancements, translations, and documentation.
 
-## Getting started
+This guide outlines our development workflow, architecture guidelines, and engineering conventions.
 
-```sh
-git clone https://github.com/PixelPlayerHQ/PixelPlayerOSS.git
+---
+
+## 🛠️ Getting Started
+
+### 1. Prerequisites
+- **JDK 21** (Temurin or OpenJDK 21)
+- **Android SDK**: `compileSdk 37`, `targetSdk 37`, `minSdk 30` (Android 11+)
+- **Git**
+
+### 2. Clone the Repository
+```bash
+git clone https://github.com/KDharshana/PixelPlayerOSS.git
 cd PixelPlayerOSS
-
-# Universal debug APK for local installation
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:assembleDebug -Ppixelplayer.enableAbiSplits=false
 ```
 
-Requirements: **JDK 21**, Android **compile/target SDK 37**, min SDK 30 (Android 11+).
-Kotlin code style is `official`.
+### 3. Build the Project
+```bash
+# Build universal debug APK for testing
+./gradlew :app:assembleDebug -Ptonarc.enableAbiSplits=false --no-daemon
 
-## Local checks before opening a PR
-
-Please run these and include the results in your PR description:
-
-```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:compileDebugKotlin
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:lintDebug
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:testDebugUnitTest
+# Run all unit tests
+./gradlew :app:testDebugUnitTest --no-daemon
 ```
 
-Run a single test class/method:
+---
 
-```sh
-JAVA_HOME=/usr/lib/jvm/java-21-openjdk ./gradlew :app:testDebugUnitTest \
-  --tests "com.lostf1sh.pixelplayeross.SomeTestClass.someMethod"
+## 🧪 Local Verification & Pre-PR Checks
+
+Before opening a pull request, ensure all local verification checks pass:
+
+```bash
+# 1. Compile Kotlin
+./gradlew :app:compileDebugKotlin --no-daemon
+
+# 2. Run Linting
+./gradlew :app:lintDebug --no-daemon
+
+# 3. Run Unit Tests (650+ tests)
+./gradlew :app:testDebugUnitTest --no-daemon
 ```
 
-> Unit tests use **JUnit Jupiter** (`useJUnitPlatform()`), not JUnit 4 — use
-> `org.junit.jupiter.api.Test`, not `org.junit.Test`.
+### Running Targeted Unit Tests
+To run a specific test class or method:
+```bash
+./gradlew :app:testDebugUnitTest --tests "com.quietrays.tonarc.data.analytics.TasteProfileManagerTest" --no-daemon
+```
 
-## Conventions that matter
+> **Note**: Tonarc uses **JUnit Jupiter** (`org.junit.jupiter.api.Test`), not JUnit 4.
 
-These are easy to get wrong and will come up in review:
+---
 
-- **Slice `PlayerUiState`, never collect the whole thing.** It updates on every
-  position tick, so collecting all ~30 fields in a screen causes recomposition
-  storms. Map to a small slice + `distinctUntilChanged()`. The reference pattern
-  is `PlayerUiSheetSliceV2` in `UnifiedPlayerSheetV2`. See
-  [app/performance_analysis.md](app/performance_analysis.md) before touching list
-  rendering, animations, or `PlayerUiState`.
-- **Prefer `ImmutableList<T>` over `List<T>` in `@Composable` params** for
-  strong-skipping (`kotlinx.collections.immutable`). But `.toImmutableList()` is
-  `O(n)` — don't call it on every recomposition. New widely-used domain models go
-  in `app/compose_stability.conf`.
-- **Navigate with `navController.navigateSafely(...)`** (from
-  `NavControllerExtensions.kt`), never `navController.navigate(...)` directly — it
-  retries on the `IllegalStateException` thrown by rapid taps.
-- **Log with Timber, not `android.util.Log`.** Debug builds plant a `DebugTree`;
-  release uses `ReleaseTree` (WARN/ERROR/WTF only). Raw `Log.x` bypasses the
-  release filter.
-- **Room schema changes require a migration** (schemas are exported to
-  `app/schemas`). Destructive migration is only allowed in debug builds.
-- **`@Singleton` is already the dominant scope** — be cautious about adding more
-  (flagged as a low-end memory risk in the perf audit). Prefer `@ViewModelScoped`
-  for single-consumer state.
-- Keep user-facing strings in `res/values/strings*.xml` (`stringResource(...)`),
-  not hardcoded in Composables.
+## 📐 Architecture & Engineering Conventions
 
-## Pull requests
+### 1. Presentation & State Management
+- **Compose State Slicing**: Avoid observing monolithic state objects directly. Slice `PlayerUiState` with `.map { it.toSlice() }.distinctUntilChanged()` to prevent recomposition storms during playback position ticks.
+- **Compose Stability**: Prefer `ImmutableList<T>` over `List<T>` in `@Composable` parameter lists (`kotlinx.collections.immutable`). Add new domain models to `app/compose_stability.conf` if needed.
+- **Material 3 Expressive**: Follow Material 3 Expressive design tokens, utilizing `AbsoluteSmoothCornerShape` for rounded containers and fluid transitions.
 
-- Keep changes focused; one logical change per PR.
-- Describe what changed and why, and include build/test results.
-- Do **not** add a `Co-Authored-By:` trailer to commits or PR bodies.
+### 2. Audio & Media Playback
+- **Media3 Routing**: Route all playback mutations through `MusicService` / `MediaController` rather than directly manipulating player instances in UI.
+- **DualPlayerEngine**: Custom engine for gapless playback, smart crossfades, and volume leveling.
 
-## Reporting bugs
+### 3. Database & Storage
+- **Room SQLite & Migrations**: Any schema change in `PixelPlayerDatabase` must include an incremental migration in `app/src/main/java/com/quietrays/tonarc/data/database/Migrations.kt` and an exported schema JSON in `app/schemas/`.
+- **Offline First**: All remote operations (YouTube Music, Navidrome, Jellyfin, LRCLIB) must cache locally into Room DAOs (`YouTubeDao`, `LyricsDao`, `OfflineTrackDao`, etc.).
 
-Open an issue using the bug-report template. Please include your app version,
-device/Android version, and which music source (local / Navidrome / Jellyfin) is
-involved.
+### 4. Navigation & Logging
+- **Safe Navigation**: Use `navController.navigateSafely(...)` from `NavControllerExtensions.kt` to handle rapid tap events gracefully.
+- **Logging**: Use `Timber`, never raw `android.util.Log`. Debug builds output to `DebugTree`; release builds automatically restrict logs to WARN/ERROR/WTF.
+
+### 5. Localization & Strings
+- All user-facing strings must reside in `app/src/main/res/values/strings.xml` and localized variant folders (`values-ar`, `values-de`, `values-es`, `values-fr`, `values-in`, `values-it`, `values-ko`, `values-nb`, `values-ru`, `values-tr`, `values-zh-rCN`).
+
+---
+
+## 🚀 Submitting Pull Requests
+
+1. **Focus**: Keep PRs focused on a single logical feature, bugfix, or refactor.
+2. **Branching**: Create a feature branch off `main` (e.g. `feat/your-feature` or `fix/issue-description`).
+3. **Commit Messages**: Follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat(radio): ...`, `fix(lyrics): ...`, `style(ui): ...`).
+4. **Description**: Detail what was changed, why, and include output from `./gradlew :app:testDebugUnitTest --no-daemon` and `./gradlew assembleDebug --no-daemon`.
+5. **No AI Trailers**: Do not add `Co-Authored-By:` trailers to commits or PR descriptions.
+
+---
+
+## 🐛 Reporting Bugs & Feature Requests
+
+- Check [GitHub Issues](https://github.com/KDharshana/PixelPlayerOSS/issues) before opening a new ticket.
+- Include:
+  - App version (e.g. `v0.1.0-alpha.5`)
+  - Device model & Android version
+  - Music source involved (Local, YouTube Music, Navidrome, Jellyfin, ListenBrainz)
+  - Clear steps to reproduce and relevant log snippets (via `adb logcat -s Tonarc:*`)
