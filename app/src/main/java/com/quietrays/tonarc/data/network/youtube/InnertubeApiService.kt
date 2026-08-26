@@ -462,15 +462,14 @@ class InnertubeApiService @Inject constructor(
         try {
             val body = JSONObject().apply {
                 put("context", createBaseContext())
-                val params = JSONObject().apply {
-                    put("videoId", videoId)
-                }
+                put("videoId", videoId)
                 put("params", "CAESAhAB")
             }
             val request = buildRequest("get_transcript", body)
             val response = okHttpClient.newCall(request).execute()
             if (!response.isSuccessful) return@withContext null
             val responseBody = response.body?.string() ?: return@withContext null
+            extractVisitorData(responseBody)
             InnertubeParser.parseTranscriptLyrics(responseBody)
         } catch (e: Exception) {
             android.util.Log.w("YouTubeMusic", "Failed to parse transcript lyrics for $videoId", e)

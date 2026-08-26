@@ -383,6 +383,180 @@ class LyricsRepositoryImplTest {
         assertThat(result.synced!!.first().line).isEqualTo("Never gonna give you up")
     }
 
+    @Test
+    fun fetchLyricsFromAPI_lrclibSyncedLyricsSuccess_persistsRemoteLyrics() = runTest {
+        val apiService = mockk<LrcLibApiService>(relaxed = true)
+        val innertubeService = mockk<com.quietrays.tonarc.data.network.youtube.InnertubeApiService>(relaxed = true)
+        val lyricsDao = mockk<LyricsDao>(relaxed = true)
+        val lyrics = lrcResponse(
+            name = "Bohemian Rhapsody",
+            artistName = "Queen",
+            duration = 354.0
+        )
+        coEvery { lyricsDao.getLyrics(any()) } returns null
+        coEvery { apiService.searchLyrics(trackName = "Bohemian Rhapsody", artistName = "Queen") } returns arrayOf(lyrics)
+
+        val repository = LyricsRepositoryImpl(
+            context = testContext(),
+            lrcLibApiService = apiService,
+            innertubeApiService = innertubeService,
+            lyricsDao = lyricsDao,
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            userPreferencesRepository = userPreferencesRepository()
+        )
+        val song = testSong(
+            id = "501",
+            title = "Bohemian Rhapsody",
+            artist = "Queen",
+            duration = 354_000L
+        )
+
+        val result = repository.getLyrics(song, LyricsSourcePreference.API_FIRST)
+
+        assertThat(result).isNotNull()
+        assertThat(result!!.areFromRemote).isTrue()
+        assertThat(result.synced).isNotEmpty()
+        assertThat(result.synced!!.first().line).isEqualTo("First line")
+        coVerify(exactly = 1) {
+            lyricsDao.insert(
+                match { entity ->
+                    entity.songId == 501L &&
+                        entity.isSynced &&
+                        entity.source == "remote" &&
+                        entity.content.contains("First line")
+                }
+            )
+        }
+        coVerify(exactly = 0) { innertubeService.getTranscriptLyrics(any()) }
+        coVerify(exactly = 0) { innertubeService.search(any(), any(), any()) }
+    }
+
+    @Test
+    fun fetchLyricsFromAPI_lrclibFailure_fallsBackToYouTubeTranscriptWithSearchResolution() = runTest {
+        val apiService = mockk<LrcLibApiService>(relaxed = true)
+        val innertubeService = mockk<com.quietrays.tonarc.data.network.youtube.InnertubeApiService>(relaxed = true)
+        val lyricsDao = mockk<LyricsDao>(relaxed = true)
+        coEvery { lyricsDao.getLyrics(any()) } returns null
+        coEvery { apiService.searchLyrics(any(), any(), any(), any()) } returns emptyArray()
+        coEvery { apiService.getLyrics(any(), any(), any(), any()) } returns null
+
+        val searchResult = com.quietrays.tonarc.data.network.youtube.InnertubeSearchResult(
+            query = "Starboy The Weeknd",
+            songs = listOf(
+                com.quietrays.tonarc.data.network.youtube.InnertubeTrack(
+                    videoId = "d38H_rJ2_iA",
+                    title = "Starboy",
+                    artist = "The Weeknd"
+                )
+            )
+        )
+        coEvery { innertubeService.search("Starboy The Weeknd") } returns searchResult
+        coEvery { innertubeService.getTranscriptLyrics("d38H_rJ2_iA") } returns "[00:01.50]I'm tryna put you in the worst mood, ah\n[00:05.00]P1 cleaner than your church shoes, ah"
+
+        val repository = LyricsRepositoryImpl(
+            context = testContext(),
+            lrcLibApiService = apiService,
+            innertubeApiService = innertubeService,
+            lyricsDao = lyricsDao,
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            userPreferencesRepository = userPreferencesRepository()
+        )
+        val song = testSong(
+            id = "502",
+            title = "Starboy",
+            artist = "The Weeknd",
+            duration = 230_000L
+        )
+
+        val result = repository.getLyrics(song, LyricsSourcePreference.API_FIRST)
+
+        assertThat(result).isNotNull()
+        assertThat(result!!.areFromRemote).isTrue()
+        assertThat(result.synced).isNotEmpty()
+        assertThat(result.synced!!.first().line).isEqualTo("I'm tryna put you in the worst mood, ah")
+
+        coVerify(exactly = 1) { innertubeService.search("Starboy The Weeknd") }
+        coVerify(exactly = 1) { innertubeService.getTranscriptLyrics("d38H_rJ2_iA") }
+        coVerify(exactly = 1) {
+            lyricsDao.insert(
+                match { entity ->
+                    entity.songId == 502L &&
+                        entity.isSynced &&
+                        entity.source == "youtube" &&
+                        entity.content.contains("I'm tryna put you in the worst mood")
+                }
+            )
+        }
+    }
+
+    @Test
+    fun fetchFromRemote_lrclibNoSynced_fallsBackToYouTubeTranscriptAndPersistsToSQLite() = runTest {
+        val apiService = mockk<LrcLibApiService>(relaxed = true)
+        val innertubeService = mockk<com.quietrays.tonarc.data.network.youtube.InnertubeApiService>(relaxed = true)
+        val lyricsDao = mockk<LyricsDao>(relaxed = true)
+        coEvery { lyricsDao.getLyrics(any()) } returns null
+
+        val plainLyricsResponse = LrcLibResponse(
+            id = 999,
+            name = "Local Audio",
+            artistName = "Local Artist",
+            albumName = "Local Album",
+            duration = 180.0,
+            plainLyrics = "Some plain lyrics text without timestamps",
+            syncedLyrics = null
+        )
+        coEvery { apiService.searchLyrics(any(), any(), any(), any()) } returns arrayOf(plainLyricsResponse)
+        coEvery { apiService.getLyrics(any(), any(), any(), any()) } returns plainLyricsResponse
+
+        val searchResult = com.quietrays.tonarc.data.network.youtube.InnertubeSearchResult(
+            query = "Local Audio Local Artist",
+            songs = listOf(
+                com.quietrays.tonarc.data.network.youtube.InnertubeTrack(
+                    videoId = "yt_local_video_123",
+                    title = "Local Audio",
+                    artist = "Local Artist"
+                )
+            )
+        )
+        coEvery { innertubeService.search("Local Audio Local Artist") } returns searchResult
+        coEvery { innertubeService.getTranscriptLyrics("yt_local_video_123") } returns "[00:02.00]Synced youtube line 1\n[00:06.00]Synced youtube line 2"
+
+        val repository = LyricsRepositoryImpl(
+            context = testContext(),
+            lrcLibApiService = apiService,
+            innertubeApiService = innertubeService,
+            lyricsDao = lyricsDao,
+            okHttpClient = mockk<OkHttpClient>(relaxed = true),
+            userPreferencesRepository = userPreferencesRepository()
+        )
+        val song = testSong(
+            id = "503",
+            title = "Local Audio",
+            artist = "Local Artist",
+            duration = 180_000L
+        )
+
+        val result = repository.fetchFromRemote(song)
+
+        assertThat(result.isSuccess).isTrue()
+        val (lyrics, rawLyrics) = result.getOrThrow()
+        assertThat(lyrics.areFromRemote).isTrue()
+        assertThat(lyrics.synced).isNotEmpty()
+        assertThat(lyrics.synced!!.first().line).isEqualTo("Synced youtube line 1")
+        assertThat(rawLyrics).contains("Synced youtube line 1")
+
+        coVerify(exactly = 1) {
+            lyricsDao.insert(
+                match { entity ->
+                    entity.songId == 503L &&
+                        entity.isSynced &&
+                        entity.source == "youtube" &&
+                        entity.content.contains("Synced youtube line 1")
+                }
+            )
+        }
+    }
+
     private fun testContext(filesDir: File = Files.createTempDirectory("pixelplayer-lyrics-test").toFile()): Context {
         return mockk<Context>(relaxed = true) {
             every { this@mockk.filesDir } returns filesDir

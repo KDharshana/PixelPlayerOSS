@@ -231,4 +231,83 @@ class InnertubeApiServiceTest {
 
         assertThat(success).isFalse()
     }
+
+    @Test
+    fun `getTranscriptLyrics builds request with videoId and params and parses transcript`() = runBlocking {
+        val transcriptResponseJson = """
+            {
+                "actions": [
+                    {
+                        "updateEngagementPanelAction": {
+                            "content": {
+                                "transcriptRenderer": {
+                                    "content": {
+                                        "transcriptSearchPanelRenderer": {
+                                            "body": {
+                                                "transcriptSegmentListRenderer": {
+                                                    "initialSegments": [
+                                                        {
+                                                            "transcriptSegmentRenderer": {
+                                                                "startMs": "1500",
+                                                                "snippet": {
+                                                                    "runs": [
+                                                                        { "text": "First synced line" }
+                                                                    ]
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            "transcriptSegmentRenderer": {
+                                                                "startMs": "4000",
+                                                                "snippet": {
+                                                                    "runs": [
+                                                                        { "text": "Second synced line" }
+                                                                    ]
+                                                                }
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        interceptor.responseProvider = { request ->
+            createSuccessResponse(request, transcriptResponseJson)
+        }
+
+        val result = apiService.getTranscriptLyrics("test_video_123")
+
+        assertThat(result).isNotNull()
+        assertThat(result).contains("[00:01.50]First synced line")
+        assertThat(result).contains("[00:04.00]Second synced line")
+
+        assertThat(interceptor.recordedRequests).hasSize(1)
+        val request = interceptor.recordedRequests.first()
+        assertThat(request.method).isEqualTo("POST")
+        assertThat(request.url.toString()).isEqualTo("https://music.youtube.com/youtubei/v1/get_transcript?prettyPrint=false")
+
+        val bodyJson = request.readBodyJson()
+        assertThat(bodyJson.getString("videoId")).isEqualTo("test_video_123")
+        assertThat(bodyJson.getString("params")).isEqualTo("CAESAhAB")
+        assertThat(bodyJson.has("context")).isTrue()
+    }
+
+    @Test
+    fun `getTranscriptLyrics returns null when server returns error`() = runBlocking {
+        interceptor.responseProvider = { request ->
+            createErrorResponse(request, 404)
+        }
+
+        val result = apiService.getTranscriptLyrics("invalid_video_id")
+
+        assertThat(result).isNull()
+    }
 }
