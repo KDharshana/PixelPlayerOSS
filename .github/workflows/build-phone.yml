@@ -8,11 +8,8 @@ on:
       - 'feature/**'
       - 'fix/**'
     paths-ignore:
-      - "**.md"
       - "docs/**"
       - "assets/**"
-      - "fastlane/**"
-      - "metadata/**"
       - "LICENSE"
       - ".github/FUNDING.yml"
       - ".github/ISSUE_TEMPLATE/**"
