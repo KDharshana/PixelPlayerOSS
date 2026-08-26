@@ -108,12 +108,20 @@ jobs:
             cp "$apk" "release-apks/Tonarc-${{ steps.version.outputs.name }}-$abi.apk"
           done
 
+      - name: Prepare release notes from CHANGELOG.md
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            cat CHANGELOG.md > release-notes.md
+          else
+            echo "Release ${{ steps.version.outputs.name }}" > release-notes.md
+          fi
+
       - name: Create GitHub prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "${{ steps.version.outputs.tag }}"
           --prerelease
-          --generate-notes
+          --notes-file release-notes.md
           --title "Tonarc ${{ steps.version.outputs.name }}"
           release-apks/*.apk
