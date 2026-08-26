@@ -48,6 +48,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.MoreVert
@@ -1311,11 +1312,14 @@ private fun QueueSourceBadge(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val isRadio = remember(queueSourceName) {
+        queueSourceName.contains("Radio", ignoreCase = true) || queueSourceName.contains("Mix", ignoreCase = true)
+    }
     Surface(
-        modifier = modifier.widthIn(max = 190.dp),
+        modifier = modifier.widthIn(max = 210.dp),
         shape = CircleShape,
-        color = colors.surfaceContainerHighest.copy(alpha = 0.88f),
-        tonalElevation = 0.dp,
+        color = if (isRadio) colors.primaryContainer.copy(alpha = 0.92f) else colors.surfaceContainerHighest.copy(alpha = 0.88f),
+        tonalElevation = if (isRadio) 2.dp else 0.dp,
         shadowElevation = 0.dp
     ) {
         Row(
@@ -1324,15 +1328,15 @@ private fun QueueSourceBadge(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.QueueMusic,
+                imageVector = if (isRadio) Icons.Filled.GraphicEq else Icons.AutoMirrored.Rounded.QueueMusic,
                 contentDescription = null,
                 modifier = Modifier.size(18.dp),
-                tint = colors.onSurfaceVariant
+                tint = if (isRadio) colors.onPrimaryContainer else colors.onSurfaceVariant
             )
             Text(
                 text = queueSourceName.ifBlank { stringResource(R.string.presentation_batch_e_queue_source_fallback) },
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
-                color = colors.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (isRadio) FontWeight.SemiBold else FontWeight.Medium),
+                color = if (isRadio) colors.onPrimaryContainer else colors.onSurfaceVariant,
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1
             )

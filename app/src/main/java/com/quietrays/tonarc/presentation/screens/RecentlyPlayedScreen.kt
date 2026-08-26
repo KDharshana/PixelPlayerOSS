@@ -288,6 +288,10 @@ fun RecentlyPlayedScreen(
                     }
                     showSongInfoBottomSheet = false
                 },
+                onStartRadio = {
+                    playerViewModel.playInstantRadio(song)
+                    showSongInfoBottomSheet = false
+                },
                 onAddToQueue = {
                     playerViewModel.addSongToQueue(song)
                     showSongInfoBottomSheet = false

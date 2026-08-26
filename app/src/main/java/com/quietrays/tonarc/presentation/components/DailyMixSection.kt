@@ -121,6 +121,10 @@ fun DailyMixSection(
                 )
                 showSongInfoSheet = false
             },
+            onStartRadio = {
+                playerViewModel.playInstantRadio(song)
+                showSongInfoSheet = false
+            },
             onAddToQueue = {
                 playerViewModel.addSongToQueue(song)
                 showSongInfoSheet = false

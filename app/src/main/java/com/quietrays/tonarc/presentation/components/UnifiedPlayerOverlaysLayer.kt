@@ -206,6 +206,10 @@ internal fun UnifiedPlayerSongInfoLayer(
                     )
                     onDismissSongInfo()
                 },
+                onStartRadio = {
+                    playerViewModel.playInstantRadio(liveSong)
+                    onDismissSongInfo()
+                },
                 onAddToQueue = {
                     playerViewModel.addSongToQueue(liveSong)
                     onDismissSongInfo()

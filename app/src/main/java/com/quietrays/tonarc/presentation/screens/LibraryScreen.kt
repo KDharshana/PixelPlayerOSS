@@ -1522,6 +1522,10 @@ fun LibraryScreen(
                     playerViewModel.showAndPlaySong(currentSong)
                     showSongInfoBottomSheet = false
                 },
+                onStartRadio = {
+                    playerViewModel.playInstantRadio(currentSong)
+                    showSongInfoBottomSheet = false
+                },
                 onAddToQueue = {
                     playerViewModel.addSongToQueue(currentSong)
                     showSongInfoBottomSheet = false

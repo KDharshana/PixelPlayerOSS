@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.rounded.Album
@@ -125,6 +126,7 @@ fun SongInfoBottomSheet(
         coverArtUpdate: CoverArtUpdate?
     ) -> Unit,
     removeFromListTrigger: () -> Unit,
+    onStartRadio: (() -> Unit)? = null,
     songInfoViewModel: SongInfoBottomSheetViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
@@ -507,6 +509,31 @@ fun SongInfoBottomSheet(
                                                         modifier = Modifier.size(FloatingActionButtonDefaults.LargeIconSize),
                                                         imageVector = Icons.Rounded.Share,
                                                         contentDescription = stringResource(R.string.cd_share_song_file)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        if (onStartRadio != null) {
+                                            item {
+                                                FilledTonalButton(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .heightIn(min = 60.dp),
+                                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                                    ),
+                                                    shape = CircleShape,
+                                                    onClick = onStartRadio
+                                                ) {
+                                                    Icon(
+                                                        Icons.Filled.GraphicEq,
+                                                        contentDescription = "Start Instant Radio"
+                                                    )
+                                                    Spacer(Modifier.width(10.dp))
+                                                    Text(
+                                                        "Start Instant Radio",
+                                                        fontWeight = FontWeight.SemiBold
                                                     )
                                                 }
                                             }

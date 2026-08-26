@@ -147,6 +147,10 @@ fun DailyMixScreen(
                 playerViewModel.showAndPlaySong(song, dailyMixSongs, dailyMixTitle, isVoluntaryPlay = false)
                 showSongInfoSheet = false
             },
+            onStartRadio = {
+                playerViewModel.playInstantRadio(song)
+                showSongInfoSheet = false
+            },
             onAddToQueue = {
                 playerViewModel.addSongToQueue(song)
                 showSongInfoSheet = false

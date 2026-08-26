@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -419,6 +420,9 @@ fun ArtistDetailScreen(
                                     )
                                 }
                             },
+                            onRadioClick = {
+                                playerViewModel.playArtistRadio(artist.name)
+                            },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
                             onClearCustomImage = { viewModel.clearCustomImage() }
                         )
@@ -440,6 +444,9 @@ fun ArtistDetailScreen(
                                         startAtZero = true
                                     )
                                 }
+                            },
+                            onRadioClick = {
+                                playerViewModel.playArtistRadio(artist.name)
                             },
                             onChangeImage = { imagePickerLauncher.launch("image/*") },
                             onClearCustomImage = { viewModel.clearCustomImage() }
@@ -471,6 +478,10 @@ fun ArtistDetailScreen(
                 onDismiss = { showSongInfoBottomSheet = false },
                 onPlaySong = {
                     playerViewModel.showAndPlaySong(currentSong)
+                    showSongInfoBottomSheet = false
+                },
+                onStartRadio = {
+                    playerViewModel.playInstantRadio(currentSong)
                     showSongInfoBottomSheet = false
                 },
                 onAddToQueue = {
@@ -733,6 +744,7 @@ private fun SharedArtistTopBarProbe(
     hasCustomImage: Boolean,
     onBackPressed: () -> Unit,
     onPlayClick: () -> Unit,
+    onRadioClick: () -> Unit = {},
     onChangeImage: () -> Unit,
     onClearCustomImage: () -> Unit
 ) {
@@ -790,6 +802,7 @@ private fun SharedArtistTopBarProbe(
                 MusicIconPattern(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                         .graphicsLayer { alpha = expandedContentAlpha }
                 )
             }
@@ -806,35 +819,13 @@ private fun SharedArtistTopBarProbe(
                 .fillMaxWidth()
                 .height(80.dp)
                 .background(statusBarBrush)
-                .align(Alignment.TopCenter)
         )
 
         CollapsibleCommonTopBar(
             title = artist.name,
-            subtitle = formatSongCount(songsCount),
             collapseFraction = collapseFraction,
             headerHeight = headerHeight,
             onBackClick = onBackPressed,
-            containerColor = surfaceColor.copy(alpha = solidAlpha),
-            collapsedTitleStartPadding = 68.dp,
-            expandedTitleStartPadding = 24.dp,
-            collapsedTitleEndPadding = 88.dp,
-            expandedTitleEndPadding = 136.dp,
-            containerHeightRange = 112.dp to 56.dp,
-            titleStyle = MaterialTheme.typography.headlineMedium.copy(
-                fontFamily = RoundedSans,
-                fontWeight = FontWeight.SemiBold,
-                textGeometricTransform = TextGeometricTransform(scaleX = 1.08f)
-            ),
-            titleScaleRange = 1f to 1f,
-            titleFontSizeRange = 30.sp to 18.sp,
-            maxLines = if (collapseFraction < 0.5f) 2 else 1,
-            collapsedSubtitleMaxLines = 1,
-            expandedSubtitleMaxLines = 2,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            subtitleColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            fadeSubtitleOnCollapse = false,
-            syncStatusBarWithContainer = false,
             actions = {
                 Box(
                     modifier = Modifier.padding(end = 12.dp, top = 4.dp)
@@ -882,20 +873,38 @@ private fun SharedArtistTopBarProbe(
             }
         )
 
-        LargeExtendedFloatingActionButton(
-            onClick = onPlayClick,
-            shape = RoundedStarShape(sides = 8, curve = 0.05, rotation = 0f),
+        Row(
             modifier = Modifier
                 .align(shuffleAlignment)
                 .statusBarsPadding()
-                .padding(end = 16.dp)
-                .graphicsLayer {
+                .padding(end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FloatingActionButton(
+                onClick = onRadioClick,
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.graphicsLayer {
                     scaleX = expandedContentAlpha
                     scaleY = expandedContentAlpha
                     alpha = expandedContentAlpha
                 }
-        ) {
-            Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.presentation_batch_d_cd_shuffle_play_artist))
+            ) {
+                Icon(Icons.Filled.GraphicEq, contentDescription = "Artist Radio")
+            }
+            LargeExtendedFloatingActionButton(
+                onClick = onPlayClick,
+                shape = RoundedStarShape(sides = 8, curve = 0.05, rotation = 0f),
+                modifier = Modifier.graphicsLayer {
+                    scaleX = expandedContentAlpha
+                    scaleY = expandedContentAlpha
+                    alpha = expandedContentAlpha
+                }
+            ) {
+                Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.presentation_batch_d_cd_shuffle_play_artist))
+            }
         }
     }
 }
@@ -912,6 +921,7 @@ private fun CustomCollapsingTopBar(
     headerImageRequestSize: Size,
     onBackPressed: () -> Unit,
     onPlayClick: () -> Unit,
+    onRadioClick: () -> Unit = {},
     onChangeImage: () -> Unit,
     onClearCustomImage: () -> Unit
 ) {
@@ -1099,19 +1109,37 @@ private fun CustomCollapsingTopBar(
                     }
                 }
 
-                LargeExtendedFloatingActionButton(
-                    onClick = onPlayClick,
-                    shape = RoundedStarShape(sides = 8, curve = 0.05, rotation = 0f),
+                Row(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                        .graphicsLayer {
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FloatingActionButton(
+                        onClick = onRadioClick,
+                        shape = CircleShape,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.graphicsLayer {
                             scaleX = fabScale
                             scaleY = fabScale
                             alpha = fabScale
                         }
-                ) {
-                    Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.cd_shuffle_play_album))
+                    ) {
+                        Icon(Icons.Filled.GraphicEq, contentDescription = "Artist Radio")
+                    }
+                    LargeExtendedFloatingActionButton(
+                        onClick = onPlayClick,
+                        shape = RoundedStarShape(sides = 8, curve = 0.05, rotation = 0f),
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = fabScale
+                            scaleY = fabScale
+                            alpha = fabScale
+                        }
+                    ) {
+                        Icon(Icons.Rounded.Shuffle, contentDescription = stringResource(R.string.cd_shuffle_play_album))
+                    }
                 }
             }
         }

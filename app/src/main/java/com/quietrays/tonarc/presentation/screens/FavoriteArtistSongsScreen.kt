@@ -273,6 +273,10 @@ fun FavoriteArtistSongsScreen(
                 )
                 showSongOptionsSheet = null
             },
+            onStartRadio = {
+                playerViewModel.playInstantRadio(song)
+                showSongOptionsSheet = null
+            },
             onAddToQueue = {
                 playerViewModel.addSongToQueue(song)
                 showSongOptionsSheet = null
