@@ -420,17 +420,13 @@ private fun AboutHeroCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.pixelplayer_base_monochrome),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(10.dp).size(28.dp),
-                        )
-                    }
+                    Image(
+                        painter = painterResource(R.drawable.ic_app_logo),
+                        contentDescription = stringResource(R.string.about_app_name),
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(AbsoluteSmoothCornerShape(16.dp, 60))
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
