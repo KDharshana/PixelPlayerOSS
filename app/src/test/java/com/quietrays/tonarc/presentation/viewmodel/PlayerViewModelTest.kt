@@ -92,6 +92,7 @@ class PlayerViewModelTest {
     private val mockYouTubeDao: com.quietrays.tonarc.data.database.YouTubeDao = mockk(relaxed = true)
     private val mockInnertubeApiService: com.quietrays.tonarc.data.network.youtube.InnertubeApiService = mockk(relaxed = true)
     private val mockSmartRadioEngine: com.quietrays.tonarc.data.recommendation.SmartRadioEngine = mockk(relaxed = true)
+    private val mockTasteProfileManager: com.quietrays.tonarc.data.analytics.TasteProfileManager = mockk(relaxed = true)
     private lateinit var mockMediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory
 
     private val testDispatcher = StandardTestDispatcher()
@@ -241,7 +242,8 @@ class PlayerViewModelTest {
             mockInnertubeApiService,
             sessionToken,
             mockMediaControllerFactory,
-            mockSmartRadioEngine
+            mockSmartRadioEngine,
+            mockTasteProfileManager
         )
     }
 

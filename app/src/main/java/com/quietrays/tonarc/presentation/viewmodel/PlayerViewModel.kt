@@ -39,6 +39,8 @@ import com.quietrays.tonarc.R
 import com.quietrays.tonarc.data.ContextualMix
 import com.quietrays.tonarc.data.DailyMixManager
 import com.quietrays.tonarc.data.MixMood
+import com.quietrays.tonarc.data.analytics.TasteProfile
+import com.quietrays.tonarc.data.analytics.TasteProfileManager
 import com.quietrays.tonarc.data.EotStateHolder
 import com.quietrays.tonarc.data.database.AlbumArtThemeDao
 import com.quietrays.tonarc.data.database.YouTubeSongEntity
@@ -287,6 +289,7 @@ class PlayerViewModel @Inject constructor(
     private val sessionToken: SessionToken,
     private val mediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory,
     private val smartRadioEngine: com.quietrays.tonarc.data.recommendation.SmartRadioEngine,
+    private val tasteProfileManager: TasteProfileManager,
     private val dailyMixManager: DailyMixManager = dailyMixStateHolder.dailyMixManager
 ) : ViewModel() {
 
@@ -388,6 +391,9 @@ class PlayerViewModel @Inject constructor(
 
     private val _playerUiState = MutableStateFlow(PlayerUiState())
     val playerUiState: StateFlow<PlayerUiState> = _playerUiState.asStateFlow()
+
+    private val _tasteProfile = MutableStateFlow<TasteProfile?>(null)
+    val tasteProfile: StateFlow<TasteProfile?> = _tasteProfile.asStateFlow()
 
     val queueFlow: StateFlow<ImmutableList<Song>> = _playerUiState
         .map { it.currentPlaybackQueue }
@@ -918,6 +924,7 @@ class PlayerViewModel @Inject constructor(
         lyricsStateHolder.initialize(viewModelScope, lyricsLoadCallback, playbackStateHolder.stablePlayerState)
         playbackStateHolder.initialize(coroutineScope = viewModelScope)
         themeStateHolder.initialize(viewModelScope)
+        refreshTasteProfile()
 
         viewModelScope.launch {
             val snapshot = runCatching {
@@ -1490,6 +1497,43 @@ class PlayerViewModel @Inject constructor(
                 playContextualMix(radarMix)
             } else {
                 sendToast(context.getString(R.string.no_valid_songs))
+            }
+        }
+    }
+
+    fun refreshTasteProfile(): Job {
+        return viewModelScope.launch(Dispatchers.IO) {
+            val profile = tasteProfileManager.computeTasteProfile()
+            _tasteProfile.value = profile
+        }
+    }
+
+    fun playTopTasteMix(): Job {
+        val currentTopSongs = _tasteProfile.value?.topSongs
+        if (!currentTopSongs.isNullOrEmpty()) {
+            showAndPlaySong(
+                song = currentTopSongs.first(),
+                contextSongs = currentTopSongs,
+                queueName = "Your Taste Profile Mix",
+                isVoluntaryPlay = true
+            )
+            return CompletableDeferred(Unit)
+        } else {
+            return viewModelScope.launch {
+                val profile = withContext(Dispatchers.IO) {
+                    tasteProfileManager.computeTasteProfile()
+                }
+                _tasteProfile.value = profile
+                if (profile.topSongs.isNotEmpty()) {
+                    showAndPlaySong(
+                        song = profile.topSongs.first(),
+                        contextSongs = profile.topSongs,
+                        queueName = "Your Taste Profile Mix",
+                        isVoluntaryPlay = true
+                    )
+                } else {
+                    sendToast(context.getString(R.string.no_valid_songs))
+                }
             }
         }
     }

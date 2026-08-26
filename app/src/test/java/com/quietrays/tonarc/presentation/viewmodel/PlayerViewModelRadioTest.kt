@@ -17,6 +17,8 @@ import com.quietrays.tonarc.data.model.Song
 import com.quietrays.tonarc.data.model.SortOption
 import com.quietrays.tonarc.data.model.StorageFilter
 import com.quietrays.tonarc.data.network.youtube.InnertubeApiService
+import com.quietrays.tonarc.data.analytics.TasteProfile
+import com.quietrays.tonarc.data.analytics.TasteProfileManager
 import com.quietrays.tonarc.data.preferences.ThemePreferencesRepository
 import com.quietrays.tonarc.data.preferences.UserPreferencesRepository
 import com.quietrays.tonarc.data.recommendation.RadioResult
@@ -84,6 +86,7 @@ class PlayerViewModelRadioTest {
     private val mockYouTubeDao: YouTubeDao = mockk(relaxed = true)
     private val mockInnertubeApiService: InnertubeApiService = mockk(relaxed = true)
     private val mockSmartRadioEngine: SmartRadioEngine = mockk(relaxed = true)
+    private val mockTasteProfileManager: TasteProfileManager = mockk(relaxed = true)
     private lateinit var mockMediaControllerFactory: com.quietrays.tonarc.data.media.MediaControllerFactory
     private lateinit var mockController: MediaController
     private val controllerMediaItems = mutableListOf<MediaItem>()
@@ -283,6 +286,17 @@ class PlayerViewModelRadioTest {
         }
         every { mockMediaControllerFactory.create(any(), any(), any()) } returns mockFuture
 
+        coEvery { mockTasteProfileManager.computeTasteProfile() } returns TasteProfile(
+            archetypeTitle = "Melody Connoisseur",
+            archetypeSubtitle = "Guided by timeless songwriting and deep harmonies",
+            archetypeEmoji = "🎵",
+            totalListeningDurationMs = 0L,
+            totalPlays = 0,
+            topGenres = emptyList(),
+            topArtists = emptyList(),
+            topSongs = emptyList()
+        )
+
         playerViewModel = PlayerViewModel(
             mockContext,
             mockMusicRepository,
@@ -317,7 +331,8 @@ class PlayerViewModelRadioTest {
             mockInnertubeApiService,
             sessionToken,
             mockMediaControllerFactory,
-            mockSmartRadioEngine
+            mockSmartRadioEngine,
+            mockTasteProfileManager
         )
         testDispatcher.scheduler.advanceUntilIdle()
     }
@@ -406,5 +421,93 @@ class PlayerViewModelRadioTest {
         advanceUntilIdle()
 
         verify { mockQueueStateHolder.setOriginalQueueOrder(listOf(radioTrack1, radioTrack2)) }
+    }
+
+    @Test
+    @DisplayName("refreshTasteProfile computes and updates tasteProfile StateFlow")
+    fun test_refreshTasteProfile_updatesTasteProfileState() = runTest(testDispatcher) {
+        val expectedProfile = TasteProfile(
+            archetypeTitle = "Late-Night Audiophile",
+            archetypeSubtitle = "Finds magic in midnight frequencies",
+            archetypeEmoji = "🌌",
+            totalListeningDurationMs = 120_000L,
+            totalPlays = 15,
+            topGenres = emptyList(),
+            topArtists = emptyList(),
+            topSongs = listOf(radioTrack1, radioTrack2)
+        )
+        coEvery { mockTasteProfileManager.computeTasteProfile() } returns expectedProfile
+
+        playerViewModel.refreshTasteProfile().join()
+        advanceUntilIdle()
+
+        assertThat(playerViewModel.tasteProfile.value).isEqualTo(expectedProfile)
+    }
+
+    @Test
+    @DisplayName("playTopTasteMix plays topSongs from cached taste profile")
+    fun test_playTopTasteMix_whenProfileCached_playsTopSongs() = runTest(testDispatcher) {
+        val expectedProfile = TasteProfile(
+            archetypeTitle = "High-Energy Motivator",
+            archetypeSubtitle = "Fueled by high-tempo anthems",
+            archetypeEmoji = "⚡",
+            totalListeningDurationMs = 240_000L,
+            totalPlays = 30,
+            topGenres = emptyList(),
+            topArtists = emptyList(),
+            topSongs = listOf(radioTrack1, radioTrack2)
+        )
+        coEvery { mockTasteProfileManager.computeTasteProfile() } returns expectedProfile
+
+        playerViewModel.refreshTasteProfile().join()
+        advanceUntilIdle()
+
+        playerViewModel.playTopTasteMix().join()
+        advanceUntilIdle()
+
+        verify { mockQueueStateHolder.setOriginalQueueOrder(listOf(radioTrack1, radioTrack2)) }
+    }
+
+    @Test
+    @DisplayName("playTopTasteMix computes taste profile and plays topSongs when not already cached")
+    fun test_playTopTasteMix_whenProfileNotCached_computesAndPlaysTopSongs() = runTest(testDispatcher) {
+        val expectedProfile = TasteProfile(
+            archetypeTitle = "Acoustic Explorer",
+            archetypeSubtitle = "Energized by morning melodies",
+            archetypeEmoji = "🌅",
+            totalListeningDurationMs = 60_000L,
+            totalPlays = 5,
+            topGenres = emptyList(),
+            topArtists = emptyList(),
+            topSongs = listOf(radioTrack2)
+        )
+        coEvery { mockTasteProfileManager.computeTasteProfile() } returns expectedProfile
+
+        playerViewModel.playTopTasteMix().join()
+        advanceUntilIdle()
+
+        assertThat(playerViewModel.tasteProfile.value).isEqualTo(expectedProfile)
+        verify { mockQueueStateHolder.setOriginalQueueOrder(listOf(radioTrack2)) }
+    }
+
+    @Test
+    @DisplayName("playTopTasteMix emits toast when topSongs is empty")
+    fun test_playTopTasteMix_whenNoTopSongs_emitsToast() = runTest(testDispatcher) {
+        val emptyProfile = TasteProfile(
+            archetypeTitle = "Melody Connoisseur",
+            archetypeSubtitle = "Guided by timeless songwriting",
+            archetypeEmoji = "🎵",
+            totalListeningDurationMs = 0L,
+            totalPlays = 0,
+            topGenres = emptyList(),
+            topArtists = emptyList(),
+            topSongs = emptyList()
+        )
+        coEvery { mockTasteProfileManager.computeTasteProfile() } returns emptyProfile
+
+        playerViewModel.playTopTasteMix().join()
+        advanceUntilIdle()
+
+        verify(exactly = 0) { mockQueueStateHolder.setOriginalQueueOrder(any()) }
     }
 }
